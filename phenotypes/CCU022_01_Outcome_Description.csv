@@ -1,0 +1,89 @@
+Phecode,Phenotype,Phecode category,Sex
+COVID_hspt,COVID-19 hospitalisation,,Both
+death,Death,,Both
+153,Colorectal cancer,neoplasms,Both
+153.2,Colon cancer,neoplasms,Both
+165,Cancer within the respiratory system,neoplasms,Both
+165.1,Cancer of bronchus; lung,neoplasms,Both
+174.1,Breast cancer [female],neoplasms,Female
+174.11,Malignant neoplasm of female breast,neoplasms,Female
+185,Cancer of prostate,neoplasms,Male
+189,Cancer of urinary organs (incl. kidney and bladder),neoplasms,Both
+195,"Cancer, suspected or other",neoplasms,Both
+208,Benign neoplasm of colon,neoplasms,Both
+214,Lipoma,neoplasms,Both
+218.1,Uterine leiomyoma,neoplasms,Female
+250.2,Type 2 diabetes,endocrine/metabolic,Both
+272.1,Hyperlipidemia,endocrine/metabolic,Both
+274.1,Gout,endocrine/metabolic,Both
+278.1,Obesity,endocrine/metabolic,Both
+300.1,Anxiety disorder,mental disorders,Both
+318,Tobacco use disorder,mental disorders,Both
+366,Cataract,sense organs,Both
+366.2,Senile cataract,sense organs,Both
+379.3,Aphakia and other disorders of lens,sense organs,Both
+380,Disorders of external ear,sense organs,Both
+380.1,Otitis externa,sense organs,Both
+381.1,Otitis media,sense organs,Both
+381.11,Suppurative and unspecified otitis media,sense organs,Both
+401.1,Essential hypertension,circulatory system,Both
+411.2,Myocardial infarction,circulatory system,Both
+411.4,Coronary atherosclerosis,circulatory system,Both
+415,Pulmonary heart disease,circulatory system,Both
+415.11,"Pulmonary embolism and infarction, acute",circulatory system,Both
+427.2,Atrial fibrillation and flutter,circulatory system,Both
+433.2,Occlusion of cerebral arteries,circulatory system,Both
+433.21,"Cerebral artery occlusion, with cerebral infarction",circulatory system,Both
+433.31,Transient cerebral ischemia,circulatory system,Both
+451,Phlebitis and thrombophlebitis,circulatory system,Both
+451.2,Phlebitis and thrombophlebitis of lower extremities,circulatory system,Both
+454,Varicose veins,circulatory system,Both
+454.1,Varicose veins of lower extremity,circulatory system,Both
+464,Acute sinusitis,respiratory,Both
+465,Acute upper respiratory infections of multiple or unspecified sites,respiratory,Both
+474,Acute and chronic tonsillitis,respiratory,Both
+474.1,Acute tonsillitis,respiratory,Both
+480,Pneumonia,respiratory,Both
+480.1,Bacterial pneumonia,respiratory,Both
+480.11,Pneumococcal pneumonia,respiratory,Both
+483,Acute bronchitis and bronchiolitis,respiratory,Both
+495,Asthma,respiratory,Both
+521,Diseases of hard tissues of teeth,digestive,Both
+521.1,Dental caries,digestive,Both
+530.1,"Esophagitis, GERD and related diseases",digestive,Both
+530.14,Reflux esophagitis,digestive,Both
+550,Abdominal hernia,digestive,Both
+550.1,Inguinal hernia,digestive,Both
+550.4,Umbilical hernia,digestive,Both
+550.5,Ventral hernia,digestive,Both
+558,Noninfectious gastroenteritis,digestive,Both
+565,Anal and rectal conditions,digestive,Both
+565.1,Anal and rectal polyp,digestive,Both
+574.1,Cholelithiasis,digestive,Both
+574.12,Cholelithiasis with other cholecystitis,digestive,Both
+577,Diseases of pancreas,digestive,Both
+578.9,Hemorrhage of gastrointestinal tract,digestive,Both
+594,Urinary calculus,genitourinary,Both
+594.1,Calculus of kidney,genitourinary,Both
+595,Hydronephrosis,genitourinary,Both
+599.1,Urinary obstruction,genitourinary,Both
+618,Genital prolapse,genitourinary,Female
+618.1,Prolapse of vaginal walls,genitourinary,Female
+622.1,Polyp of corpus uteri,genitourinary,Female
+626,Disorders of menstruation and other abnormal bleeding from female genital tract,genitourinary,Female
+626.1,Irregular menstrual cycle/bleeding,genitourinary,Female
+627,Menopausal and postmenopausal disorders,genitourinary,Female
+627.1,Postmenopausal bleeding,genitourinary,Female
+681,Superficial cellulitis and abscess,dermatologic,Both
+681.3,Cellulitis and abscess of arm/hand,dermatologic,Both
+689,Disorder of skin and subcutaneous tissue NOS,dermatologic,Both
+702,Degenerative skin conditions and other dermatoses,dermatologic,Both
+706.2,Sebaceous cyst,dermatologic,Both
+716.9,Arthropathy NOS,musculoskeletal,Both
+726,Peripheral enthesopathies and allied syndromes,musculoskeletal,Both
+727.1,Synovitis and tenosynovitis,musculoskeletal,Both
+728,"Disorders of muscle, ligament, and fascia",musculoskeletal,Both
+740.1,Osteoarthritis; localized,musculoskeletal,Both
+745,Pain in joint,musculoskeletal,Both
+835,Internal derangement of knee,injuries & poisonings,Both
+994.2,Sepsis,injuries & poisonings,Both

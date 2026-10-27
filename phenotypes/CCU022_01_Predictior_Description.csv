@@ -1,0 +1,213 @@
+Phecode,Phenotype,Phecode category
+8,Intestinal infection,infectious diseases
+38,Septicemia,infectious diseases
+41,Bacterial infection NOS,infectious diseases
+70,Viral hepatitis,infectious diseases
+79,Viral infection,infectious diseases
+112,Candidiasis,infectious diseases
+153,Colorectal cancer,neoplasms
+172,Skin cancer,neoplasms
+174,Breast cancer,neoplasms
+180,Cervical cancer and dysplasia,neoplasms
+184,Cancer of other female genital organs,neoplasms
+185,Cancer of prostate,neoplasms
+189,Cancer of urinary organs (incl. kidney and bladder),neoplasms
+195,"Cancer, suspected or other",neoplasms
+198,Secondary malignant neoplasm,neoplasms
+199,Neoplasm of uncertain behavior,neoplasms
+200,Myeloproliferative disease,neoplasms
+202,"Cancer of other lymphoid, histiocytic tissue",neoplasms
+208,Benign neoplasm of colon,neoplasms
+211,Benign neoplasm of other parts of digestive system,neoplasms
+214,Lipoma,neoplasms
+216,Benign neoplasm of skin,neoplasms
+218,Benign neoplasm of uterus,neoplasms
+220,Benign neoplasm of ovary,neoplasms
+228,"Hemangioma and lymphangioma, any site",neoplasms
+229,Benign neoplasm of unspecified sites,neoplasms
+240,Simple and unspecified goiter,endocrine/metabolic
+242,Thyrotoxicosis with or without goiter,endocrine/metabolic
+244,Hypothyroidism,endocrine/metabolic
+250,Diabetes mellitus,endocrine/metabolic
+261,Vitamin deficiency,endocrine/metabolic
+272,Disorders of lipoid metabolism,endocrine/metabolic
+274,Gout and other crystal arthropathies,endocrine/metabolic
+275,Disorders of mineral metabolism,endocrine/metabolic
+276,"Disorders of fluid, electrolyte, and acid-base balance",endocrine/metabolic
+278,"Overweight, obesity and other hyperalimentation",endocrine/metabolic
+280,Iron deficiency anemias,hematopoietic
+285,Other anemias,hematopoietic
+287,Purpura and other hemorrhagic conditions,hematopoietic
+288,Diseases of white blood cells,hematopoietic
+289,Other diseases of blood and blood-forming organs,hematopoietic
+290,Delirium dementia and amnestic and other cognitive disorders,mental disorders
+295,Schizophrenia and other psychotic disorders,mental disorders
+296,Mood disorders,mental disorders
+300,Anxiety disorders,mental disorders
+301,Personality disorders,mental disorders
+315,Develomental delays and disorders,mental disorders
+316,Substance addiction and disorders,mental disorders
+317,Alcohol-related disorders,mental disorders
+318,Tobacco use disorder,mental disorders
+327,Sleep disorders,neurological
+334,Degenerative disease of the spinal cord,neurological
+335,Multiple sclerosis,neurological
+340,Migraine,neurological
+342,Hemiplegia,neurological
+345,"Epilepsy, recurrent seizures, convulsions",neurological
+351,Other peripheral nerve disorders,neurological
+352,Disorders of other cranial nerves,neurological
+353,Nerve root and plexus disorders,neurological
+357,Inflammatory and toxic neuropathy,neurological
+361,Retinal detachments and defects,sense organs
+362,Other retinal disorders,sense organs
+365,Glaucoma,sense organs
+366,Cataract,sense organs
+367,Disorders of refraction and accommodation; blindness and low vision,sense organs
+368,Visual disturbances,sense organs
+371,Inflammation of the eye,sense organs
+374,Other disorders of eyelids,sense organs
+375,Disorders of lacrimal system,sense organs
+378,Strabismus and other disorders of binocular eye movements,sense organs
+379,Other disorders of eye,sense organs
+380,Disorders of external ear,sense organs
+381,Otitis media and Eustachian tube disorders,sense organs
+384,Other disorders of tympanic membrane,sense organs
+386,Vertiginous syndromes and other disorders of vestibular system,sense organs
+389,Hearing loss,sense organs
+394,Rheumatic disease of the heart valves,circulatory system
+395,Heart valve disorders,circulatory system
+401,Hypertension,circulatory system
+411,Ischemic Heart Disease,circulatory system
+414,Other forms of chronic heart disease,circulatory system
+415,Pulmonary heart disease,circulatory system
+416,Cardiomegaly,circulatory system
+420,Carditis,circulatory system
+425,Cardiomyopathy,circulatory system
+426,Cardiac conduction disorders,circulatory system
+427,Cardiac dysrhythmias,circulatory system
+428,Congestive heart failure; nonhypertensive,circulatory system
+430,Intracranial hemorrhage,circulatory system
+433,Cerebrovascular disease,circulatory system
+442,Other aneurysm,circulatory system
+443,Peripheral vascular disease,circulatory system
+447,Other disorders of arteries and arterioles,circulatory system
+451,Phlebitis and thrombophlebitis,circulatory system
+454,Varicose veins,circulatory system
+455,Hemorrhoids,circulatory system
+458,Hypotension,circulatory system
+465,Acute upper respiratory infections of multiple or unspecified sites,respiratory
+470,Septal Deviations/Turbinate Hypertrophy,respiratory
+471,Nasal polyps,respiratory
+473,Diseases of the larynx and vocal cords,respiratory
+474,Acute and chronic tonsillitis,respiratory
+475,Chronic sinusitis,respiratory
+476,Allergic rhinitis,respiratory
+479,Other upper respiratory disease,respiratory
+480,Pneumonia,respiratory
+495,Asthma,respiratory
+496,Chronic airway obstruction,respiratory
+506,Empyema and pneumothorax,respiratory
+507,Pleurisy; pleural effusion,respiratory
+508,Pulmonary collapse; interstitial and compensatory emphysema,respiratory
+509,"Respiratory failure, insufficiency, arrest",respiratory
+512,Other symptoms of respiratory system,respiratory
+519,"Other diseases of respiratory system, not elsewhere classified",respiratory
+520,Disorders of tooth development,digestive
+521,Diseases of hard tissues of teeth,digestive
+522,Diseases of pulp and periapical tissues,digestive
+523,Gingival and periodontal diseases,digestive
+525,Other diseases of the teeth and supporting structures,digestive
+528,"Diseases of the oral soft tissues, excluding lesions specific for gingiva and tongue",digestive
+530,Diseases of esophagus,digestive
+531,Peptic ulcer (excl. esophageal),digestive
+535,Gastritis and duodenitis,digestive
+537,Other disorders of stomach and duodenum,digestive
+540,Appendiceal conditions,digestive
+550,Abdominal hernia,digestive
+555,Inflammatory bowel disease and other gastroenteritis and colitis,digestive
+557,Intestinal malabsorption (non-celiac),digestive
+558,Noninfectious gastroenteritis,digestive
+560,Intestinal obstruction without mention of hernia,digestive
+562,Diverticulosis and diverticulitis,digestive
+563,Constipation,digestive
+564,Functional digestive disorders,digestive
+565,Anal and rectal conditions,digestive
+568,Other disorders of peritoneum,digestive
+569,Other disorders of intestine,digestive
+571,Chronic liver disease and cirrhosis,digestive
+573,Other disorders of liver,digestive
+574,Cholelithiasis and cholecystitis,digestive
+575,Other biliary tract disease,digestive
+577,Diseases of pancreas,digestive
+578,Gastrointestinal hemorrhage,digestive
+580,Nephritis; nephrosis; renal sclerosis,genitourinary
+585,Renal failure,genitourinary
+586,Other disorders of the kidney and ureters,genitourinary
+590,Pyelonephritis,genitourinary
+591,Urinary tract infection,genitourinary
+592,Cystitis and urethritis,genitourinary
+594,Urinary calculus,genitourinary
+595,Hydronephrosis,genitourinary
+596,Other disorders of bladder,genitourinary
+597,Other disorders of urethra and urinary tract,genitourinary
+599,Other symptoms/disorders or the urinary system,genitourinary
+600,Hyperplasia of prostate,genitourinary
+601,Inflammatory diseases of prostate,genitourinary
+603,Other disorders of testis,genitourinary
+604,Disorders of penis,genitourinary
+608,Other disorders of male genital organs,genitourinary
+610,Benign mammary dysplasias,genitourinary
+611,Abnormal findings on mammogram or breast exam,genitourinary
+613,Other nonmalignant breast conditions,genitourinary
+614,Inflammatory diseases of female pelvic organs,genitourinary
+615,Endometriosis,genitourinary
+618,Genital prolapse,genitourinary
+619,Noninflammatory female genital disorders,genitourinary
+622,Polyp of female genital organs,genitourinary
+623,Hypertrophy of female genital organs,genitourinary
+624,Symptoms involving female genital tract,genitourinary
+625,Pain and other symptoms associated with female genital organs,genitourinary
+626,Disorders of menstruation and other abnormal bleeding from female genital tract,genitourinary
+627,Menopausal and postmenopausal disorders,genitourinary
+628,Ovarian cyst,genitourinary
+681,Superficial cellulitis and abscess,dermatologic
+686,Other local infections of skin and subcutaneous tissue,dermatologic
+689,Disorder of skin and subcutaneous tissue NOS,dermatologic
+696,Psoriasis and related disorders,dermatologic
+701,Other hypertrophic and atrophic conditions of skin,dermatologic
+702,Degenerative skin conditions and other dermatoses,dermatologic
+703,"Diseases of nail, NOS",dermatologic
+704,Diseases of hair and hair follicles,dermatologic
+706,Diseases of sebaceous glands,dermatologic
+707,Chronic ulcer of skin,dermatologic
+709,Diffuse diseases of connective tissue,dermatologic
+714,Rheumatoid arthritis and other inflammatory polyarthropathies,musculoskeletal
+715,Other inflammatory spondylopathies,musculoskeletal
+716,Other arthropathies,musculoskeletal
+720,Spinal stenosis,musculoskeletal
+721,Spondylosis and allied disorders,musculoskeletal
+722,Intervertebral disc disorders,musculoskeletal
+726,Peripheral enthesopathies and allied syndromes,musculoskeletal
+727,"Other disorders of synovium, tendon, and bursa",musculoskeletal
+728,"Disorders of muscle, ligament, and fascia",musculoskeletal
+729,Other disorders of soft tissues,musculoskeletal
+733,Other disorders of bone and cartilage,musculoskeletal
+735,Acquired foot deformities,musculoskeletal
+736,Other acquired deformities of limbs,musculoskeletal
+738,Other acquired musculoskeletal deformity,musculoskeletal
+740,Osteoarthrosis,musculoskeletal
+741,Symptoms and disorders of the joints,musculoskeletal
+742,"Derangement of joint, non-traumatic",musculoskeletal
+743,"Osteoporosis, osteopenia and pathological fracture",musculoskeletal
+745,Pain in joint,musculoskeletal
+760,Back pain,symptoms
+761,Cervicalgia,symptoms
+764,Sciatica,symptoms
+766,"Neuralgia, neuritis, and radiculitis NOS",symptoms
+771,Musculoskeletal symptoms referable to limbs,symptoms
+773,Pain in limb,symptoms
+785,Abdominal pain,symptoms
+835,Internal derangement of knee,injuries & poisonings
+939,Atopic/contact dermatitis due to other or unspecified,dermatologic
+994,Sepsis and SIRS,injuries & poisonings

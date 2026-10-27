@@ -1,0 +1,9022 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ### Preparation of QCovid codelist
+# MAGIC ##### Pearl Liu adapted from Project CCU051
+
+# COMMAND ----------
+
+# MAGIC %md # CCU051_D02b_codelist_Qcovid
+# MAGIC
+# MAGIC **Description** This notebook creates the QCovid items codelist needed for CCU051.
+# MAGIC
+# MAGIC **Author(s)** Tom Bolton, Genevieve Cezard
+# MAGIC
+# MAGIC **Project** CCU051
+# MAGIC
+# MAGIC **First copied over** 2022.11.16 (adapted from CCU051_D02a_codelist_covid)
+# MAGIC
+# MAGIC **Date last updated** 2023.03.02 / 2023.06.23 (to export codelist)
+# MAGIC
+# MAGIC **Date last run** 2023.03.02 / 2023.06.23 (to export codelist)
+# MAGIC
+# MAGIC **Data input** functions - libraries - parameters - manual codelist input\
+# MAGIC gdppr_refset - icd10 - opcs4 - pmeds
+# MAGIC
+# MAGIC **Data output** - 'ccu051_out_codelist_qcovid'
+
+# COMMAND ----------
+
+spark.sql('CLEAR CACHE')
+
+# COMMAND ----------
+
+# DBTITLE 1,Libraries
+import pyspark.sql.functions as f
+import pyspark.sql.types as t
+from pyspark.sql import Window
+
+from functools import reduce
+
+#import databricks.koalas as ks
+import pyspark.pandas as pd
+import numpy as np
+
+import re
+import io
+import datetime
+
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib import dates as mdates
+import seaborn as sns
+
+print("Matplotlib version: ", matplotlib.__version__)
+print("Seaborn version: ", sns.__version__)
+_datetimenow = datetime.datetime.now() # .strftime("%Y%m%d")
+print(f"_datetimenow:  {_datetimenow}")
+
+# COMMAND ----------
+
+# DBTITLE 1,Functions
+# MAGIC %run "./General_functions"
+
+# COMMAND ----------
+
+# MAGIC %md # 0. Parameters
+
+# COMMAND ----------
+
+# MAGIC %run "./CCU051_D01_parameters"
+
+# COMMAND ----------
+
+# MAGIC %md # 1. Data
+
+# COMMAND ----------
+
+# path_ref_snomed_int      = '.snomed_ct_concepts_core_int'
+# path_ref_snomed_gb       = '.snomed_ct_concepts_core_gb'
+# path_ref_snomed_rf2      = '.snomed_ct_rf2_descriptions'
+# path_ref_snomed_rf2_drug = '.snomed_ct_rf2_drug_desc_v01'
+
+gdppr_refset = spark.table(path_ref_gdppr_refset)
+icd10        = spark.table(path_ref_icd10)
+opcs4        = spark.table(path_ref_opcs4)
+pmeds        = extract_batch_from_archive(parameters_df_datasets, 'pmeds')
+
+# COMMAND ----------
+
+# MAGIC %md # 1b. Prepare
+
+# COMMAND ----------
+
+# prepare
+# note: using BNF term as DMD term not available - could instead merge DMD code to refset later
+pmeds_prepared = (
+   pmeds
+   .where(f.col('PrescribeddmdCode').isNotNull())
+   .select(f.col('PrescribeddmdCode').alias('code'), f.col('PrescribedBNFName').alias('term'))
+   .dropDuplicates(['code'])
+ )
+
+# temp save
+pmeds_prepared = temp_save(df=pmeds_prepared, out_name=f'{proj}_tmp_codelist_qcovid_pmeds')
+
+# COMMAND ----------
+
+pmeds_prepared = spark.table(f'{dbc}.{proj}_tmp_codelist_qcovid_pmeds')
+
+# check
+count_var(pmeds_prepared, 'code'); print()
+print(pmeds_prepared.limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 2. Codelist
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC PL 20251110 update: changed CKD names to different CKD stages for SNOMED, ICD10, and OPCS codes. See COVID-19+PRA+code+list+v1.xlsx
+
+# COMMAND ----------
+
+# QCovid items
+# Source - TO SAVE IN:
+# CVD-COVID-UK Consortium Shared Folder\Projects\CCU051\Name_file.txt
+
+codelist_qcovid_1 = """
+code,code_type,QCovid_item
+10273003,SNOMED,CoronaryHeartDisease
+102942005,SNOMED,LearningDisabilityOrDownsSyndrome
+103075007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+10451007,SNOMED,CongenitalHeartProblem
+105526001,SNOMED,HousingCategory
+10633002,SNOMED,HeartFailure
+10713006,SNOMED,RheumatoidArthritisOrSle
+10743271000119103,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+107691000000105,SNOMED,Ethnicity
+1077211000000104,SNOMED,HousingCategory
+10818008,SNOMED,CongenitalHeartProblem
+1086701000000102,SNOMED,Asthma
+1086711000000100,SNOMED,Asthma
+1090241000000107,SNOMED,CancerOfBloodOrBoneMarrow
+1090271000000101,SNOMED,LungOrOralCancer
+1091861000000100,SNOMED,CancerOfBloodOrBoneMarrow
+1091921000000103,SNOMED,CancerOfBloodOrBoneMarrow
+1092831000000100,SNOMED,LungOrOralCancer
+109367000,SNOMED,LungOrOralCancer
+109368005,SNOMED,LungOrOralCancer
+109371002,SNOMED,LungOrOralCancer
+109388009,SNOMED,LungOrOralCancer
+109391009,SNOMED,CancerOfBloodOrBoneMarrow
+109823006,SNOMED,LungOrOralCancer
+109824000,SNOMED,LungOrOralCancer
+109830000,SNOMED,LungOrOralCancer
+109962001,SNOMED,CancerOfBloodOrBoneMarrow
+109965004,SNOMED,CancerOfBloodOrBoneMarrow
+109966003,SNOMED,CancerOfBloodOrBoneMarrow
+109969005,SNOMED,CancerOfBloodOrBoneMarrow
+109975001,SNOMED,CancerOfBloodOrBoneMarrow
+109976000,SNOMED,CancerOfBloodOrBoneMarrow
+109977009,SNOMED,CancerOfBloodOrBoneMarrow
+109978004,SNOMED,CancerOfBloodOrBoneMarrow
+109980005,SNOMED,CancerOfBloodOrBoneMarrow
+109988003,SNOMED,CancerOfBloodOrBoneMarrow
+109989006,SNOMED,CancerOfBloodOrBoneMarrow
+109991003,SNOMED,CancerOfBloodOrBoneMarrow
+109992005,SNOMED,CancerOfBloodOrBoneMarrow
+109994006,SNOMED,CancerOfBloodOrBoneMarrow
+109995007,SNOMED,CancerOfBloodOrBoneMarrow
+109996008,SNOMED,CancerOfBloodOrBoneMarrow
+109998009,SNOMED,CancerOfBloodOrBoneMarrow
+110000005,SNOMED,CancerOfBloodOrBoneMarrow
+110002002,SNOMED,CancerOfBloodOrBoneMarrow
+110004001,SNOMED,CancerOfBloodOrBoneMarrow
+110005000,SNOMED,CancerOfBloodOrBoneMarrow
+110006004,SNOMED,CancerOfBloodOrBoneMarrow
+110007008,SNOMED,CancerOfBloodOrBoneMarrow
+110013004,SNOMED,LungOrOralCancer
+110359009,SNOMED,LearningDisabilityOrDownsSyndrome
+110401000000103,SNOMED,Ethnicity
+110751000000108,SNOMED,Ethnicity
+110761000000106,SNOMED,Ethnicity
+110771000000104,SNOMED,Ethnicity
+110781000000102,SNOMED,Ethnicity
+110791000000100,SNOMED,Ethnicity
+111293003,SNOMED,ThrombosisOrPulmonaryEmbolus
+111321007,SNOMED,CongenitalHeartProblem
+111322000,SNOMED,CongenitalHeartProblem
+111323005,SNOMED,CongenitalHeartProblem
+111396008,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+111479008,SNOMED,Dementia
+111482003,SNOMED,BipolarDiseaseOrSchizophrenia
+111483008,SNOMED,BipolarDiseaseOrSchizophrenia
+111484002,SNOMED,BipolarDiseaseOrSchizophrenia
+111552007,SNOMED,Diabetes
+111552007,SNOMED,Diabetes
+111880001,SNOMED,HivOrAids
+112777008,SNOMED,PriorFractureOfHipWristSpineHumerus
+112991000000101,SNOMED,Diabetes
+11399002,SNOMED,PulmonaryHypertensionOrFibrosis
+115232000,SNOMED,LungOrOralCancer
+11530004,SNOMED,Diabetes
+118599009,SNOMED,CancerOfBloodOrBoneMarrow
+118600007,SNOMED,CancerOfBloodOrBoneMarrow
+118601006,SNOMED,CancerOfBloodOrBoneMarrow
+118602004,SNOMED,CancerOfBloodOrBoneMarrow
+118605002,SNOMED,CancerOfBloodOrBoneMarrow
+118606001,SNOMED,CancerOfBloodOrBoneMarrow
+118607005,SNOMED,CancerOfBloodOrBoneMarrow
+118608000,SNOMED,CancerOfBloodOrBoneMarrow
+118609008,SNOMED,CancerOfBloodOrBoneMarrow
+118610003,SNOMED,CancerOfBloodOrBoneMarrow
+118611004,SNOMED,CancerOfBloodOrBoneMarrow
+118612006,SNOMED,CancerOfBloodOrBoneMarrow
+118613001,SNOMED,CancerOfBloodOrBoneMarrow
+118614007,SNOMED,CancerOfBloodOrBoneMarrow
+118615008,SNOMED,CancerOfBloodOrBoneMarrow
+118617000,SNOMED,CancerOfBloodOrBoneMarrow
+118618005,SNOMED,CancerOfBloodOrBoneMarrow
+119249001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+119250001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+12088005,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+12295008,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+12348006,SNOMED,Dementia
+12368000,SNOMED,LiverCirrhosis
+12428000,SNOMED,Asthma
+125081000119106,SNOMED,StrokeOrTia
+125607007,SNOMED,PriorFractureOfHipWristSpineHumerus
+125608002,SNOMED,PriorFractureOfHipWristSpineHumerus
+125871005,SNOMED,PriorFractureOfHipWristSpineHumerus
+125872003,SNOMED,PriorFractureOfHipWristSpineHumerus
+127012008,SNOMED,Diabetes
+127013003,SNOMED,Diabetes
+127013003,SNOMED,Diabetes
+127014009,SNOMED,PeripheralVascularDisease
+127040003,SNOMED,SickleCellViaBool
+127041004,SNOMED,SickleCellViaBool
+127225006,SNOMED,CancerOfBloodOrBoneMarrow
+127286005,SNOMED,PriorFractureOfHipWristSpineHumerus
+12746007,SNOMED,PriorFractureOfHipWristSpineHumerus
+12770006,SNOMED,CongenitalHeartProblem
+128053003,SNOMED,ThrombosisOrPulmonaryEmbolus
+128188000,SNOMED,CerebralPalsy
+128404006,SNOMED,HeartFailure
+128831004,SNOMED,CancerOfBloodOrBoneMarrow
+128832006,SNOMED,CancerOfBloodOrBoneMarrow
+128841001,SNOMED,CancerOfBloodOrBoneMarrow
+128875000,SNOMED,CancerOfBloodOrBoneMarrow
+128922003,SNOMED,CancerOfBloodOrBoneMarrow
+128923008,SNOMED,CancerOfBloodOrBoneMarrow
+128924002,SNOMED,CancerOfBloodOrBoneMarrow
+128931003,SNOMED,CancerOfBloodOrBoneMarrow
+128933000,SNOMED,CancerOfBloodOrBoneMarrow
+128934006,SNOMED,CancerOfBloodOrBoneMarrow
+128935007,SNOMED,CancerOfBloodOrBoneMarrow
+129000002,SNOMED,CancerOfBloodOrBoneMarrow
+12939007,SNOMED,BipolarDiseaseOrSchizophrenia
+129574000,SNOMED,CoronaryHeartDisease
+13092008,SNOMED,Dementia
+13151001,SNOMED,Asthma
+13213009,SNOMED,CongenitalHeartProblem
+13313007,SNOMED,BipolarDiseaseOrSchizophrenia
+13394002,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+134188003,SNOMED,LearningDisabilityOrDownsSyndrome
+134399007,SNOMED,ThrombosisOrPulmonaryEmbolus
+134401001,SNOMED,HeartFailure
+135836000,SNOMED,Copd
+13645005,SNOMED,Copd
+13746004,SNOMED,BipolarDiseaseOrSchizophrenia
+13867009,SNOMED,CongenitalHeartProblem
+13886001,SNOMED,SickleCellViaBool
+13973009,SNOMED,Epilepsy
+14291003,SNOMED,BipolarDiseaseOrSchizophrenia
+14317002,SNOMED,CancerOfBloodOrBoneMarrow
+14886009,SNOMED,CongenitalHeartProblem
+15096009,SNOMED,CongenitalHeartProblem
+15244003,SNOMED,ParkinsonsDisease
+15258001,SNOMED,StrokeOrTia
+15459006,SNOMED,CongenitalHeartProblem
+15662003,SNOMED,Dementia
+1573641000006103,SNOMED,HivOrAids
+15964901000119107,SNOMED,AtrialFibrillation
+15990001,SNOMED,CoronaryHeartDisease
+15999000,SNOMED,LiverCirrhosis
+16003001,SNOMED,Copd
+160340009,SNOMED,CerebralPalsy
+160700001,SNOMED,HousingCategory
+160731008,SNOMED,HousingCategory
+160732001,SNOMED,HousingCategory
+160733006,SNOMED,HousingCategory
+160734000,SNOMED,HousingCategory
+160737007,SNOMED,HousingCategory
+160876004,SNOMED,LearningDisabilityOrDownsSyndrome
+161112004,SNOMED,LearningDisabilityOrDownsSyndrome
+161129001,SNOMED,LearningDisabilityOrDownsSyndrome
+161138004,SNOMED,LearningDisabilityOrDownsSyndrome
+161464003,SNOMED,BipolarDiseaseOrSchizophrenia
+161465002,SNOMED,Dementia
+162004,SNOMED,BipolarDiseaseOrSchizophrenia
+16506000,SNOMED,BipolarDiseaseOrSchizophrenia
+16567006,SNOMED,CongenitalHeartProblem
+165816005,SNOMED,HivOrAids
+16623004,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+166301000000107,SNOMED,HousingCategory
+166461000000103,SNOMED,HousingCategory
+16972009,SNOMED,CongenitalHeartProblem
+16990005,SNOMED,BipolarDiseaseOrSchizophrenia
+17024001,SNOMED,CongenitalHeartProblem
+1705000,SNOMED,PriorFractureOfHipWristSpineHumerus
+170530008,SNOMED,HivOrAids
+17122004,SNOMED,LearningDisabilityOrDownsSyndrome
+17222009,SNOMED,PriorFractureOfHipWristSpineHumerus
+1749291000006109,SNOMED,PulmonaryHypertensionOrFibrosis
+1755008,SNOMED,CoronaryHeartDisease
+1761006,SNOMED,LiverCirrhosis
+1763641000006109,SNOMED,LiverCirrhosis
+17718000,SNOMED,CongenitalHeartProblem
+1776511000006108,SNOMED,CerebralPalsy
+17788007,SNOMED,CancerOfBloodOrBoneMarrow
+179159005,SNOMED,PriorFractureOfHipWristSpineHumerus
+18167009,SNOMED,Ethnicity
+185086009,SNOMED,Copd
+185218006,SNOMED,HousingCategory
+18546004,SNOMED,CongenitalHeartProblem
+1855002,SNOMED,LearningDisabilityOrDownsSyndrome
+185984009,SNOMED,Ethnicity
+185988007,SNOMED,Ethnicity
+185989004,SNOMED,Ethnicity
+185990008,SNOMED,Ethnicity
+185993005,SNOMED,Ethnicity
+185995003,SNOMED,Ethnicity
+185996002,SNOMED,Ethnicity
+185998001,SNOMED,Ethnicity
+185999009,SNOMED,Ethnicity
+186000006,SNOMED,Ethnicity
+186002003,SNOMED,Ethnicity
+186003008,SNOMED,Ethnicity
+186005001,SNOMED,Ethnicity
+186005001,SNOMED,Ethnicity
+186006000,SNOMED,Ethnicity
+186007009,SNOMED,Ethnicity
+186010002,SNOMED,Ethnicity
+186012005,SNOMED,Ethnicity
+186013000,SNOMED,Ethnicity
+186014006,SNOMED,Ethnicity
+186017004,SNOMED,Ethnicity
+186019001,SNOMED,Ethnicity
+186020007,SNOMED,Ethnicity
+186021006,SNOMED,Ethnicity
+186022004,SNOMED,Ethnicity
+186023009,SNOMED,Ethnicity
+186706006,SNOMED,HivOrAids
+186707002,SNOMED,HivOrAids
+186708007,SNOMED,HivOrAids
+18690003,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+1872221000006102,SNOMED,HousingCategory
+1872291000006100,SNOMED,HousingCategory
+187601000,SNOMED,LungOrOralCancer
+187604008,SNOMED,LungOrOralCancer
+187606005,SNOMED,LungOrOralCancer
+187608006,SNOMED,LungOrOralCancer
+187613005,SNOMED,LungOrOralCancer
+187614004,SNOMED,LungOrOralCancer
+187622006,SNOMED,LungOrOralCancer
+187624007,SNOMED,LungOrOralCancer
+187631006,SNOMED,LungOrOralCancer
+187633009,SNOMED,LungOrOralCancer
+187634003,SNOMED,LungOrOralCancer
+187635002,SNOMED,LungOrOralCancer
+187637005,SNOMED,LungOrOralCancer
+187640005,SNOMED,LungOrOralCancer
+187641009,SNOMED,LungOrOralCancer
+187644001,SNOMED,LungOrOralCancer
+187652003,SNOMED,LungOrOralCancer
+187653008,SNOMED,LungOrOralCancer
+187658004,SNOMED,LungOrOralCancer
+187659007,SNOMED,LungOrOralCancer
+187660002,SNOMED,LungOrOralCancer
+187661003,SNOMED,LungOrOralCancer
+187662005,SNOMED,LungOrOralCancer
+187666008,SNOMED,LungOrOralCancer
+187675005,SNOMED,LungOrOralCancer
+187681002,SNOMED,LungOrOralCancer
+187682009,SNOMED,LungOrOralCancer
+187683004,SNOMED,LungOrOralCancer
+187685006,SNOMED,LungOrOralCancer
+187688008,SNOMED,LungOrOralCancer
+187692001,SNOMED,LungOrOralCancer
+187693006,SNOMED,LungOrOralCancer
+187694000,SNOMED,LungOrOralCancer
+187697007,SNOMED,LungOrOralCancer
+187698002,SNOMED,LungOrOralCancer
+187700006,SNOMED,LungOrOralCancer
+187701005,SNOMED,LungOrOralCancer
+187702003,SNOMED,LungOrOralCancer
+187708004,SNOMED,LungOrOralCancer
+187709007,SNOMED,LungOrOralCancer
+1877101000006104,SNOMED,HousingCategory
+187716008,SNOMED,LungOrOralCancer
+187853005,SNOMED,LungOrOralCancer
+187854004,SNOMED,LungOrOralCancer
+187857006,SNOMED,LungOrOralCancer
+187861000,SNOMED,LungOrOralCancer
+187862007,SNOMED,LungOrOralCancer
+187864008,SNOMED,LungOrOralCancer
+187865009,SNOMED,LungOrOralCancer
+187866005,SNOMED,LungOrOralCancer
+187868006,SNOMED,LungOrOralCancer
+187869003,SNOMED,LungOrOralCancer
+187870002,SNOMED,LungOrOralCancer
+188487008,SNOMED,CancerOfBloodOrBoneMarrow
+188510001,SNOMED,CancerOfBloodOrBoneMarrow
+188511002,SNOMED,CancerOfBloodOrBoneMarrow
+188512009,SNOMED,CancerOfBloodOrBoneMarrow
+188513004,SNOMED,CancerOfBloodOrBoneMarrow
+188514005,SNOMED,CancerOfBloodOrBoneMarrow
+188515006,SNOMED,CancerOfBloodOrBoneMarrow
+188516007,SNOMED,CancerOfBloodOrBoneMarrow
+188517003,SNOMED,CancerOfBloodOrBoneMarrow
+188524002,SNOMED,CancerOfBloodOrBoneMarrow
+188529007,SNOMED,CancerOfBloodOrBoneMarrow
+188531003,SNOMED,CancerOfBloodOrBoneMarrow
+188534006,SNOMED,CancerOfBloodOrBoneMarrow
+188536008,SNOMED,CancerOfBloodOrBoneMarrow
+188537004,SNOMED,CancerOfBloodOrBoneMarrow
+188538009,SNOMED,CancerOfBloodOrBoneMarrow
+188541000,SNOMED,CancerOfBloodOrBoneMarrow
+188544008,SNOMED,CancerOfBloodOrBoneMarrow
+188547001,SNOMED,CancerOfBloodOrBoneMarrow
+188548006,SNOMED,CancerOfBloodOrBoneMarrow
+188551004,SNOMED,CancerOfBloodOrBoneMarrow
+188554007,SNOMED,CancerOfBloodOrBoneMarrow
+188558005,SNOMED,CancerOfBloodOrBoneMarrow
+188559002,SNOMED,CancerOfBloodOrBoneMarrow
+188562004,SNOMED,CancerOfBloodOrBoneMarrow
+188565002,SNOMED,CancerOfBloodOrBoneMarrow
+188566001,SNOMED,CancerOfBloodOrBoneMarrow
+188567005,SNOMED,CancerOfBloodOrBoneMarrow
+188568000,SNOMED,CancerOfBloodOrBoneMarrow
+188569008,SNOMED,CancerOfBloodOrBoneMarrow
+188570009,SNOMED,CancerOfBloodOrBoneMarrow
+188572001,SNOMED,CancerOfBloodOrBoneMarrow
+188575004,SNOMED,CancerOfBloodOrBoneMarrow
+188576003,SNOMED,CancerOfBloodOrBoneMarrow
+188577007,SNOMED,CancerOfBloodOrBoneMarrow
+188578002,SNOMED,CancerOfBloodOrBoneMarrow
+188579005,SNOMED,CancerOfBloodOrBoneMarrow
+188580008,SNOMED,CancerOfBloodOrBoneMarrow
+188582000,SNOMED,CancerOfBloodOrBoneMarrow
+188585003,SNOMED,CancerOfBloodOrBoneMarrow
+188586002,SNOMED,CancerOfBloodOrBoneMarrow
+188587006,SNOMED,CancerOfBloodOrBoneMarrow
+188589009,SNOMED,CancerOfBloodOrBoneMarrow
+188590000,SNOMED,CancerOfBloodOrBoneMarrow
+188591001,SNOMED,CancerOfBloodOrBoneMarrow
+188592008,SNOMED,CancerOfBloodOrBoneMarrow
+188593003,SNOMED,CancerOfBloodOrBoneMarrow
+188609000,SNOMED,CancerOfBloodOrBoneMarrow
+188612002,SNOMED,CancerOfBloodOrBoneMarrow
+188613007,SNOMED,CancerOfBloodOrBoneMarrow
+188627002,SNOMED,CancerOfBloodOrBoneMarrow
+188630009,SNOMED,CancerOfBloodOrBoneMarrow
+188631008,SNOMED,CancerOfBloodOrBoneMarrow
+188632001,SNOMED,CancerOfBloodOrBoneMarrow
+188633006,SNOMED,CancerOfBloodOrBoneMarrow
+188634000,SNOMED,CancerOfBloodOrBoneMarrow
+188635004,SNOMED,CancerOfBloodOrBoneMarrow
+188637007,SNOMED,CancerOfBloodOrBoneMarrow
+188640007,SNOMED,CancerOfBloodOrBoneMarrow
+188641006,SNOMED,CancerOfBloodOrBoneMarrow
+188642004,SNOMED,CancerOfBloodOrBoneMarrow
+188645002,SNOMED,CancerOfBloodOrBoneMarrow
+188648000,SNOMED,CancerOfBloodOrBoneMarrow
+188649008,SNOMED,CancerOfBloodOrBoneMarrow
+188660004,SNOMED,CancerOfBloodOrBoneMarrow
+188662007,SNOMED,CancerOfBloodOrBoneMarrow
+188663002,SNOMED,CancerOfBloodOrBoneMarrow
+188664008,SNOMED,CancerOfBloodOrBoneMarrow
+188665009,SNOMED,CancerOfBloodOrBoneMarrow
+188666005,SNOMED,CancerOfBloodOrBoneMarrow
+188667001,SNOMED,CancerOfBloodOrBoneMarrow
+188668006,SNOMED,CancerOfBloodOrBoneMarrow
+188669003,SNOMED,CancerOfBloodOrBoneMarrow
+188672005,SNOMED,CancerOfBloodOrBoneMarrow
+188674006,SNOMED,CancerOfBloodOrBoneMarrow
+188675007,SNOMED,CancerOfBloodOrBoneMarrow
+188676008,SNOMED,CancerOfBloodOrBoneMarrow
+188679001,SNOMED,CancerOfBloodOrBoneMarrow
+188691005,SNOMED,CancerOfBloodOrBoneMarrow
+188718006,SNOMED,CancerOfBloodOrBoneMarrow
+188725004,SNOMED,CancerOfBloodOrBoneMarrow
+188726003,SNOMED,CancerOfBloodOrBoneMarrow
+188728002,SNOMED,CancerOfBloodOrBoneMarrow
+188729005,SNOMED,CancerOfBloodOrBoneMarrow
+188732008,SNOMED,CancerOfBloodOrBoneMarrow
+188733003,SNOMED,CancerOfBloodOrBoneMarrow
+188734009,SNOMED,CancerOfBloodOrBoneMarrow
+188736006,SNOMED,CancerOfBloodOrBoneMarrow
+188737002,SNOMED,CancerOfBloodOrBoneMarrow
+188738007,SNOMED,CancerOfBloodOrBoneMarrow
+188741003,SNOMED,CancerOfBloodOrBoneMarrow
+188744006,SNOMED,CancerOfBloodOrBoneMarrow
+188745007,SNOMED,CancerOfBloodOrBoneMarrow
+188746008,SNOMED,CancerOfBloodOrBoneMarrow
+188748009,SNOMED,CancerOfBloodOrBoneMarrow
+188754005,SNOMED,CancerOfBloodOrBoneMarrow
+188768003,SNOMED,CancerOfBloodOrBoneMarrow
+188770007,SNOMED,CancerOfBloodOrBoneMarrow
+1890381000006102,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+189509003,SNOMED,CancerOfBloodOrBoneMarrow
+190055003,SNOMED,CancerOfBloodOrBoneMarrow
+190330002,SNOMED,Diabetes
+190331003,SNOMED,Diabetes
+190368000,SNOMED,Diabetes
+190372001,SNOMED,Diabetes
+190388001,SNOMED,Diabetes
+190389009,SNOMED,Diabetes
+190406000,SNOMED,Diabetes
+190407009,SNOMED,Diabetes
+190410002,SNOMED,Diabetes
+190411003,SNOMED,Diabetes
+190412005,SNOMED,Diabetes
+190416008,SNOMED,Diabetes
+190447002,SNOMED,Diabetes
+19057007,SNOMED,CoronaryHeartDisease
+190905008,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+190909002,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+19092004,SNOMED,CongenitalHeartProblem
+190979003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190980000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190981001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190986006,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190993005,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190995003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190996002,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190997006,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+190998001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191001007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191002000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191008001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191011000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191012007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191013002,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191018006,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+191449005,SNOMED,Dementia
+191451009,SNOMED,Dementia
+191452002,SNOMED,Dementia
+191454001,SNOMED,Dementia
+191455000,SNOMED,Dementia
+191457008,SNOMED,Dementia
+191458003,SNOMED,Dementia
+191459006,SNOMED,Dementia
+191461002,SNOMED,Dementia
+191463004,SNOMED,Dementia
+191464005,SNOMED,Dementia
+191465006,SNOMED,Dementia
+191466007,SNOMED,Dementia
+191493005,SNOMED,Dementia
+191519005,SNOMED,Dementia
+191526005,SNOMED,BipolarDiseaseOrSchizophrenia
+191527001,SNOMED,BipolarDiseaseOrSchizophrenia
+191531007,SNOMED,BipolarDiseaseOrSchizophrenia
+191539009,SNOMED,BipolarDiseaseOrSchizophrenia
+191542003,SNOMED,BipolarDiseaseOrSchizophrenia
+191547009,SNOMED,BipolarDiseaseOrSchizophrenia
+191548004,SNOMED,BipolarDiseaseOrSchizophrenia
+191554003,SNOMED,BipolarDiseaseOrSchizophrenia
+191555002,SNOMED,BipolarDiseaseOrSchizophrenia
+191559008,SNOMED,BipolarDiseaseOrSchizophrenia
+191561004,SNOMED,BipolarDiseaseOrSchizophrenia
+191562006,SNOMED,BipolarDiseaseOrSchizophrenia
+191563001,SNOMED,BipolarDiseaseOrSchizophrenia
+191564007,SNOMED,BipolarDiseaseOrSchizophrenia
+191565008,SNOMED,BipolarDiseaseOrSchizophrenia
+191567000,SNOMED,BipolarDiseaseOrSchizophrenia
+191569002,SNOMED,BipolarDiseaseOrSchizophrenia
+191570001,SNOMED,BipolarDiseaseOrSchizophrenia
+191571002,SNOMED,BipolarDiseaseOrSchizophrenia
+191572009,SNOMED,BipolarDiseaseOrSchizophrenia
+191574005,SNOMED,BipolarDiseaseOrSchizophrenia
+191577003,SNOMED,BipolarDiseaseOrSchizophrenia
+191583000,SNOMED,BipolarDiseaseOrSchizophrenia
+191584006,SNOMED,BipolarDiseaseOrSchizophrenia
+191586008,SNOMED,BipolarDiseaseOrSchizophrenia
+191588009,SNOMED,BipolarDiseaseOrSchizophrenia
+191590005,SNOMED,BipolarDiseaseOrSchizophrenia
+191592002,SNOMED,BipolarDiseaseOrSchizophrenia
+191593007,SNOMED,BipolarDiseaseOrSchizophrenia
+191595000,SNOMED,BipolarDiseaseOrSchizophrenia
+191597008,SNOMED,BipolarDiseaseOrSchizophrenia
+191618007,SNOMED,BipolarDiseaseOrSchizophrenia
+191620005,SNOMED,BipolarDiseaseOrSchizophrenia
+191621009,SNOMED,BipolarDiseaseOrSchizophrenia
+191623007,SNOMED,BipolarDiseaseOrSchizophrenia
+191625000,SNOMED,BipolarDiseaseOrSchizophrenia
+191627008,SNOMED,BipolarDiseaseOrSchizophrenia
+191629006,SNOMED,BipolarDiseaseOrSchizophrenia
+191630001,SNOMED,BipolarDiseaseOrSchizophrenia
+191634005,SNOMED,BipolarDiseaseOrSchizophrenia
+191636007,SNOMED,BipolarDiseaseOrSchizophrenia
+191638008,SNOMED,BipolarDiseaseOrSchizophrenia
+191639000,SNOMED,BipolarDiseaseOrSchizophrenia
+191641004,SNOMED,BipolarDiseaseOrSchizophrenia
+191643001,SNOMED,BipolarDiseaseOrSchizophrenia
+191658009,SNOMED,BipolarDiseaseOrSchizophrenia
+191689008,SNOMED,LearningDisabilityOrDownsSyndrome
+191690004,SNOMED,LearningDisabilityOrDownsSyndrome
+192131001,SNOMED,LearningDisabilityOrDownsSyndrome
+192136006,SNOMED,LearningDisabilityOrDownsSyndrome
+192362008,SNOMED,BipolarDiseaseOrSchizophrenia
+192562009,SNOMED,LearningDisabilityOrDownsSyndrome
+192575009,SNOMED,LearningDisabilityOrDownsSyndrome
+19274004,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+192759008,SNOMED,ThrombosisOrPulmonaryEmbolus
+192760003,SNOMED,ThrombosisOrPulmonaryEmbolus
+192761004,SNOMED,ThrombosisOrPulmonaryEmbolus
+192926004,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+192927008,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+192928003,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+192929006,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+192958009,SNOMED,CerebralPalsy
+192979009,SNOMED,Epilepsy
+192981006,SNOMED,Epilepsy
+192982004,SNOMED,Epilepsy
+192990004,SNOMED,Epilepsy
+192991000,SNOMED,Epilepsy
+192992007,SNOMED,Epilepsy
+192993002,SNOMED,Epilepsy
+192999003,SNOMED,Epilepsy
+193000002,SNOMED,Epilepsy
+193002005,SNOMED,Epilepsy
+193003000,SNOMED,Epilepsy
+193004006,SNOMED,Epilepsy
+193008009,SNOMED,Epilepsy
+193009001,SNOMED,Epilepsy
+193010006,SNOMED,Epilepsy
+193011005,SNOMED,Epilepsy
+193021002,SNOMED,Epilepsy
+193022009,SNOMED,Epilepsy
+193206003,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+193207007,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+193370005,SNOMED,SickleCellViaBool
+194802003,SNOMED,CoronaryHeartDisease
+194809007,SNOMED,CoronaryHeartDisease
+194821006,SNOMED,CoronaryHeartDisease
+194823009,SNOMED,CoronaryHeartDisease
+194828000,SNOMED,CoronaryHeartDisease
+194842008,SNOMED,CoronaryHeartDisease
+194843003,SNOMED,CoronaryHeartDisease
+194849004,SNOMED,CoronaryHeartDisease
+194856005,SNOMED,CoronaryHeartDisease
+194857001,SNOMED,CoronaryHeartDisease
+194858006,SNOMED,CoronaryHeartDisease
+194862000,SNOMED,CoronaryHeartDisease
+194863005,SNOMED,CoronaryHeartDisease
+194865003,SNOMED,CoronaryHeartDisease
+194866002,SNOMED,CoronaryHeartDisease
+194867006,SNOMED,CoronaryHeartDisease
+194868001,SNOMED,CoronaryHeartDisease
+194883006,SNOMED,ThrombosisOrPulmonaryEmbolus
+195080001,SNOMED,AtrialFibrillation
+1950961000006106,SNOMED,HousingCategory
+1951101000006103,SNOMED,HousingCategory
+195111005,SNOMED,HeartFailure
+1951111000006100,SNOMED,HousingCategory
+195112003,SNOMED,HeartFailure
+195114002,SNOMED,HeartFailure
+195165005,SNOMED,StrokeOrTia
+195167002,SNOMED,StrokeOrTia
+195168007,SNOMED,StrokeOrTia
+195169004,SNOMED,StrokeOrTia
+195185009,SNOMED,StrokeOrTia
+195186005,SNOMED,StrokeOrTia
+195189003,SNOMED,StrokeOrTia
+195190007,SNOMED,StrokeOrTia
+195199008,SNOMED,StrokeOrTia
+195200006,SNOMED,StrokeOrTia
+195201005,SNOMED,StrokeOrTia
+195205001,SNOMED,StrokeOrTia
+195206000,SNOMED,StrokeOrTia
+195209007,SNOMED,StrokeOrTia
+195210002,SNOMED,StrokeOrTia
+195211003,SNOMED,StrokeOrTia
+195212005,SNOMED,StrokeOrTia
+195213000,SNOMED,StrokeOrTia
+195216008,SNOMED,StrokeOrTia
+195217004,SNOMED,StrokeOrTia
+195229008,SNOMED,ThrombosisOrPulmonaryEmbolus
+195230003,SNOMED,StrokeOrTia
+195230003,SNOMED,ThrombosisOrPulmonaryEmbolus
+195299000,SNOMED,PeripheralVascularDisease
+195301007,SNOMED,PeripheralVascularDisease
+195302000,SNOMED,PeripheralVascularDisease
+195303005,SNOMED,PeripheralVascularDisease
+195304004,SNOMED,PeripheralVascularDisease
+195305003,SNOMED,PeripheralVascularDisease
+195306002,SNOMED,PeripheralVascularDisease
+195318006,SNOMED,PeripheralVascularDisease
+195319003,SNOMED,PeripheralVascularDisease
+195320009,SNOMED,PeripheralVascularDisease
+195321008,SNOMED,PeripheralVascularDisease
+195323006,SNOMED,PeripheralVascularDisease
+195324000,SNOMED,PeripheralVascularDisease
+195325004,SNOMED,PeripheralVascularDisease
+195326003,SNOMED,PeripheralVascularDisease
+195327007,SNOMED,PeripheralVascularDisease
+195437003,SNOMED,ThrombosisOrPulmonaryEmbolus
+195438008,SNOMED,ThrombosisOrPulmonaryEmbolus
+195949008,SNOMED,Copd
+195949008,SNOMED,Asthma
+195951007,SNOMED,Copd
+195953005,SNOMED,Copd
+195957006,SNOMED,Copd
+195958001,SNOMED,Copd
+195959009,SNOMED,Copd
+195963002,SNOMED,Copd
+195967001,SNOMED,Asthma
+195977004,SNOMED,Asthma
+19598007,SNOMED,Epilepsy
+195984007,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+195985008,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+195989002,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+195990006,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+196001008,SNOMED,Copd
+196125002,SNOMED,PulmonaryHypertensionOrFibrosis
+196578009,SNOMED,InflammatoryBowelDisease
+196976000,SNOMED,InflammatoryBowelDisease
+196977009,SNOMED,InflammatoryBowelDisease
+196983007,SNOMED,InflammatoryBowelDisease
+196987008,SNOMED,InflammatoryBowelDisease
+197279005,SNOMED,LiverCirrhosis
+197284004,SNOMED,LiverCirrhosis
+197291001,SNOMED,LiverCirrhosis
+197293003,SNOMED,LiverCirrhosis
+197294009,SNOMED,LiverCirrhosis
+197296006,SNOMED,LiverCirrhosis
+197299004,SNOMED,LiverCirrhosis
+197300007,SNOMED,LiverCirrhosis
+197301006,SNOMED,LiverCirrhosis
+197303009,SNOMED,LiverCirrhosis
+197305002,SNOMED,LiverCirrhosis
+197310003,SNOMED,LiverCirrhosis
+197316009,SNOMED,LiverCirrhosis
+197362001,SNOMED,LiverCirrhosis
+198741000000106,SNOMED,PriorFractureOfHipWristSpineHumerus
+198751000000109,SNOMED,PriorFractureOfHipWristSpineHumerus
+19943007,SNOMED,LiverCirrhosis
+199451000000106,SNOMED,Epilepsy
+19972008,SNOMED,ParkinsonsDisease
+2002641000006101,SNOMED,HousingCategory
+2002921000006103,SNOMED,HousingCategory
+2004001000006102,SNOMED,HousingCategory
+2005411000006106,SNOMED,SickleCellViaBool
+20059004,SNOMED,StrokeOrTia
+20100009,SNOMED,PriorFractureOfHipWristSpineHumerus
+2010031000006100,SNOMED,Asthma
+2010041000006105,SNOMED,Asthma
+201436003,SNOMED,RheumatoidArthritisOrSle
+201724008,SNOMED,Diabetes
+201727001,SNOMED,InflammatoryBowelDisease
+201728006,SNOMED,InflammatoryBowelDisease
+201764007,SNOMED,RheumatoidArthritisOrSle
+201766009,SNOMED,RheumatoidArthritisOrSle
+201767000,SNOMED,RheumatoidArthritisOrSle
+201768005,SNOMED,RheumatoidArthritisOrSle
+201769002,SNOMED,RheumatoidArthritisOrSle
+201770001,SNOMED,RheumatoidArthritisOrSle
+201771002,SNOMED,RheumatoidArthritisOrSle
+201772009,SNOMED,RheumatoidArthritisOrSle
+201773004,SNOMED,RheumatoidArthritisOrSle
+201774005,SNOMED,RheumatoidArthritisOrSle
+201775006,SNOMED,RheumatoidArthritisOrSle
+201776007,SNOMED,RheumatoidArthritisOrSle
+201777003,SNOMED,RheumatoidArthritisOrSle
+201778008,SNOMED,RheumatoidArthritisOrSle
+201779000,SNOMED,RheumatoidArthritisOrSle
+201780002,SNOMED,RheumatoidArthritisOrSle
+201781003,SNOMED,RheumatoidArthritisOrSle
+201783000,SNOMED,RheumatoidArthritisOrSle
+201784006,SNOMED,RheumatoidArthritisOrSle
+201785007,SNOMED,RheumatoidArthritisOrSle
+201791009,SNOMED,RheumatoidArthritisOrSle
+201796004,SNOMED,RheumatoidArthritisOrSle
+201799006,SNOMED,RheumatoidArthritisOrSle
+201805000,SNOMED,RheumatoidArthritisOrSle
+201805000,SNOMED,InflammatoryBowelDisease
+201807008,SNOMED,RheumatoidArthritisOrSle
+201807008,SNOMED,InflammatoryBowelDisease
+203450003,SNOMED,PriorFractureOfHipWristSpineHumerus
+203451004,SNOMED,PriorFractureOfHipWristSpineHumerus
+203452006,SNOMED,PriorFractureOfHipWristSpineHumerus
+203657009,SNOMED,PriorFractureOfHipWristSpineHumerus
+204296002,SNOMED,CongenitalHeartProblem
+204299009,SNOMED,CongenitalHeartProblem
+204300001,SNOMED,CongenitalHeartProblem
+204306007,SNOMED,CongenitalHeartProblem
+204311009,SNOMED,CongenitalHeartProblem
+204312002,SNOMED,CongenitalHeartProblem
+204315000,SNOMED,CongenitalHeartProblem
+204317008,SNOMED,CongenitalHeartProblem
+204318003,SNOMED,CongenitalHeartProblem
+204319006,SNOMED,CongenitalHeartProblem
+204330009,SNOMED,CongenitalHeartProblem
+204339005,SNOMED,CongenitalHeartProblem
+204342004,SNOMED,CongenitalHeartProblem
+204343009,SNOMED,CongenitalHeartProblem
+204345002,SNOMED,CongenitalHeartProblem
+204346001,SNOMED,CongenitalHeartProblem
+204351007,SNOMED,CongenitalHeartProblem
+204352000,SNOMED,CongenitalHeartProblem
+204354004,SNOMED,CongenitalHeartProblem
+204357006,SNOMED,CongenitalHeartProblem
+204362007,SNOMED,CongenitalHeartProblem
+204363002,SNOMED,CongenitalHeartProblem
+204368006,SNOMED,CongenitalHeartProblem
+204370002,SNOMED,CongenitalHeartProblem
+204378009,SNOMED,CongenitalHeartProblem
+204379001,SNOMED,CongenitalHeartProblem
+204391005,SNOMED,CongenitalHeartProblem
+204394002,SNOMED,CongenitalHeartProblem
+204395001,SNOMED,CongenitalHeartProblem
+204397009,SNOMED,CongenitalHeartProblem
+204398004,SNOMED,CongenitalHeartProblem
+204399007,SNOMED,CongenitalHeartProblem
+204407002,SNOMED,CongenitalHeartProblem
+204409004,SNOMED,CongenitalHeartProblem
+204423002,SNOMED,CongenitalHeartProblem
+204427001,SNOMED,CongenitalHeartProblem
+204431007,SNOMED,CongenitalHeartProblem
+204433005,SNOMED,CongenitalHeartProblem
+204443008,SNOMED,CongenitalHeartProblem
+204448004,SNOMED,CongenitalHeartProblem
+204451006,SNOMED,CongenitalHeartProblem
+204456001,SNOMED,CongenitalHeartProblem
+204457005,SNOMED,CongenitalHeartProblem
+204463001,SNOMED,CongenitalHeartProblem
+204464007,SNOMED,CongenitalHeartProblem
+204467000,SNOMED,CongenitalHeartProblem
+205615000,SNOMED,LearningDisabilityOrDownsSyndrome
+205616004,SNOMED,LearningDisabilityOrDownsSyndrome
+205619006,SNOMED,LearningDisabilityOrDownsSyndrome
+205620000,SNOMED,LearningDisabilityOrDownsSyndrome
+205623003,SNOMED,LearningDisabilityOrDownsSyndrome
+205624009,SNOMED,LearningDisabilityOrDownsSyndrome
+205627002,SNOMED,LearningDisabilityOrDownsSyndrome
+205630009,SNOMED,LearningDisabilityOrDownsSyndrome
+205634000,SNOMED,LearningDisabilityOrDownsSyndrome
+205636003,SNOMED,LearningDisabilityOrDownsSyndrome
+205638002,SNOMED,LearningDisabilityOrDownsSyndrome
+205644003,SNOMED,LearningDisabilityOrDownsSyndrome
+205646001,SNOMED,LearningDisabilityOrDownsSyndrome
+205647005,SNOMED,LearningDisabilityOrDownsSyndrome
+205648000,SNOMED,LearningDisabilityOrDownsSyndrome
+205649008,SNOMED,LearningDisabilityOrDownsSyndrome
+205650008,SNOMED,LearningDisabilityOrDownsSyndrome
+205651007,SNOMED,LearningDisabilityOrDownsSyndrome
+205652000,SNOMED,LearningDisabilityOrDownsSyndrome
+205653005,SNOMED,LearningDisabilityOrDownsSyndrome
+205655003,SNOMED,LearningDisabilityOrDownsSyndrome
+205657006,SNOMED,LearningDisabilityOrDownsSyndrome
+205660004,SNOMED,LearningDisabilityOrDownsSyndrome
+205661000,SNOMED,LearningDisabilityOrDownsSyndrome
+205662007,SNOMED,LearningDisabilityOrDownsSyndrome
+205665009,SNOMED,LearningDisabilityOrDownsSyndrome
+205666005,SNOMED,LearningDisabilityOrDownsSyndrome
+205672005,SNOMED,LearningDisabilityOrDownsSyndrome
+205673000,SNOMED,LearningDisabilityOrDownsSyndrome
+205674006,SNOMED,LearningDisabilityOrDownsSyndrome
+205675007,SNOMED,LearningDisabilityOrDownsSyndrome
+205676008,SNOMED,LearningDisabilityOrDownsSyndrome
+205684007,SNOMED,LearningDisabilityOrDownsSyndrome
+205686009,SNOMED,LearningDisabilityOrDownsSyndrome
+205687000,SNOMED,LearningDisabilityOrDownsSyndrome
+205698004,SNOMED,LearningDisabilityOrDownsSyndrome
+205699007,SNOMED,LearningDisabilityOrDownsSyndrome
+205700008,SNOMED,LearningDisabilityOrDownsSyndrome
+205705003,SNOMED,LearningDisabilityOrDownsSyndrome
+205706002,SNOMED,LearningDisabilityOrDownsSyndrome
+205707006,SNOMED,LearningDisabilityOrDownsSyndrome
+205708001,SNOMED,LearningDisabilityOrDownsSyndrome
+205709009,SNOMED,LearningDisabilityOrDownsSyndrome
+205710004,SNOMED,LearningDisabilityOrDownsSyndrome
+205718006,SNOMED,LearningDisabilityOrDownsSyndrome
+205719003,SNOMED,LearningDisabilityOrDownsSyndrome
+205720009,SNOMED,LearningDisabilityOrDownsSyndrome
+205728002,SNOMED,LearningDisabilityOrDownsSyndrome
+205769006,SNOMED,CongenitalHeartProblem
+205834002,SNOMED,CongenitalHeartProblem
+206586007,SNOMED,CongenitalHeartProblem
+207938004,SNOMED,PriorFractureOfHipWristSpineHumerus
+207939007,SNOMED,PriorFractureOfHipWristSpineHumerus
+207940009,SNOMED,PriorFractureOfHipWristSpineHumerus
+207941008,SNOMED,PriorFractureOfHipWristSpineHumerus
+207942001,SNOMED,PriorFractureOfHipWristSpineHumerus
+207943006,SNOMED,PriorFractureOfHipWristSpineHumerus
+207944000,SNOMED,PriorFractureOfHipWristSpineHumerus
+207945004,SNOMED,PriorFractureOfHipWristSpineHumerus
+207957008,SNOMED,PriorFractureOfHipWristSpineHumerus
+207958003,SNOMED,PriorFractureOfHipWristSpineHumerus
+207959006,SNOMED,PriorFractureOfHipWristSpineHumerus
+207960001,SNOMED,PriorFractureOfHipWristSpineHumerus
+207961002,SNOMED,PriorFractureOfHipWristSpineHumerus
+207962009,SNOMED,PriorFractureOfHipWristSpineHumerus
+207963004,SNOMED,PriorFractureOfHipWristSpineHumerus
+207964005,SNOMED,PriorFractureOfHipWristSpineHumerus
+207974008,SNOMED,PriorFractureOfHipWristSpineHumerus
+207975009,SNOMED,PriorFractureOfHipWristSpineHumerus
+207976005,SNOMED,PriorFractureOfHipWristSpineHumerus
+207993005,SNOMED,PriorFractureOfHipWristSpineHumerus
+208215006,SNOMED,PriorFractureOfHipWristSpineHumerus
+208240004,SNOMED,PriorFractureOfHipWristSpineHumerus
+208241000,SNOMED,PriorFractureOfHipWristSpineHumerus
+208242007,SNOMED,PriorFractureOfHipWristSpineHumerus
+208244008,SNOMED,PriorFractureOfHipWristSpineHumerus
+208245009,SNOMED,PriorFractureOfHipWristSpineHumerus
+208246005,SNOMED,PriorFractureOfHipWristSpineHumerus
+208318005,SNOMED,PriorFractureOfHipWristSpineHumerus
+208321007,SNOMED,PriorFractureOfHipWristSpineHumerus
+208521006,SNOMED,PriorFractureOfHipWristSpineHumerus
+208523009,SNOMED,PriorFractureOfHipWristSpineHumerus
+208524003,SNOMED,PriorFractureOfHipWristSpineHumerus
+208526001,SNOMED,PriorFractureOfHipWristSpineHumerus
+208528000,SNOMED,PriorFractureOfHipWristSpineHumerus
+208529008,SNOMED,PriorFractureOfHipWristSpineHumerus
+208530003,SNOMED,PriorFractureOfHipWristSpineHumerus
+208531004,SNOMED,PriorFractureOfHipWristSpineHumerus
+208536009,SNOMED,PriorFractureOfHipWristSpineHumerus
+208537000,SNOMED,PriorFractureOfHipWristSpineHumerus
+208540000,SNOMED,PriorFractureOfHipWristSpineHumerus
+208541001,SNOMED,PriorFractureOfHipWristSpineHumerus
+208542008,SNOMED,PriorFractureOfHipWristSpineHumerus
+208543003,SNOMED,PriorFractureOfHipWristSpineHumerus
+208544009,SNOMED,PriorFractureOfHipWristSpineHumerus
+208548007,SNOMED,PriorFractureOfHipWristSpineHumerus
+208550004,SNOMED,PriorFractureOfHipWristSpineHumerus
+208551000,SNOMED,PriorFractureOfHipWristSpineHumerus
+208552007,SNOMED,PriorFractureOfHipWristSpineHumerus
+208555009,SNOMED,PriorFractureOfHipWristSpineHumerus
+208557001,SNOMED,PriorFractureOfHipWristSpineHumerus
+208558006,SNOMED,PriorFractureOfHipWristSpineHumerus
+208559003,SNOMED,PriorFractureOfHipWristSpineHumerus
+208562000,SNOMED,PriorFractureOfHipWristSpineHumerus
+209334003,SNOMED,PriorFractureOfHipWristSpineHumerus
+209335002,SNOMED,PriorFractureOfHipWristSpineHumerus
+209336001,SNOMED,PriorFractureOfHipWristSpineHumerus
+209337005,SNOMED,PriorFractureOfHipWristSpineHumerus
+209338000,SNOMED,PriorFractureOfHipWristSpineHumerus
+21111006,SNOMED,LearningDisabilityOrDownsSyndrome
+21258007,SNOMED,ThrombosisOrPulmonaryEmbolus
+213220000,SNOMED,ThrombosisOrPulmonaryEmbolus
+21470009,SNOMED,CoronaryHeartDisease
+218728005,SNOMED,CongenitalHeartProblem
+21921000119103,SNOMED,Dementia
+21981000,SNOMED,CongenitalHeartProblem
+22053006,SNOMED,LearningDisabilityOrDownsSyndrome
+221301000000105,SNOMED,PulmonaryHypertensionOrFibrosis
+221311000000107,SNOMED,PulmonaryHypertensionOrFibrosis
+221321000000101,SNOMED,PulmonaryHypertensionOrFibrosis
+221331000000104,SNOMED,PulmonaryHypertensionOrFibrosis
+22197008,SNOMED,CancerOfBloodOrBoneMarrow
+22298006,SNOMED,CoronaryHeartDisease
+22331004,SNOMED,CancerOfBloodOrBoneMarrow
+224220007,SNOMED,HousingCategory
+224958001,SNOMED,LearningDisabilityOrDownsSyndrome
+225057002,SNOMED,Asthma
+225566008,SNOMED,CoronaryHeartDisease
+228141003,SNOMED,LearningDisabilityOrDownsSyndrome
+229676007,SNOMED,LearningDisabilityOrDownsSyndrome
+229733002,SNOMED,LearningDisabilityOrDownsSyndrome
+229736005,SNOMED,LearningDisabilityOrDownsSyndrome
+229748008,SNOMED,LearningDisabilityOrDownsSyndrome
+230273006,SNOMED,Dementia
+230285003,SNOMED,Dementia
+230286002,SNOMED,Dementia
+230287006,SNOMED,Dementia
+230292008,SNOMED,ParkinsonsDisease
+230381009,SNOMED,Epilepsy
+230413002,SNOMED,Epilepsy
+230418006,SNOMED,Epilepsy
+230429005,SNOMED,Epilepsy
+230438007,SNOMED,LearningDisabilityOrDownsSyndrome
+230441003,SNOMED,Epilepsy
+230444006,SNOMED,Epilepsy
+230456007,SNOMED,Epilepsy
+230460005,SNOMED,Epilepsy
+230572002,SNOMED,Diabetes
+230577008,SNOMED,Diabetes
+230690007,SNOMED,StrokeOrTia
+230691006,SNOMED,StrokeOrTia
+230699008,SNOMED,StrokeOrTia
+230700009,SNOMED,StrokeOrTia
+230773005,SNOMED,CerebralPalsy
+230780007,SNOMED,CerebralPalsy
+231438001,SNOMED,Dementia
+231485007,SNOMED,BipolarDiseaseOrSchizophrenia
+231494001,SNOMED,BipolarDiseaseOrSchizophrenia
+231496004,SNOMED,BipolarDiseaseOrSchizophrenia
+231536004,SNOMED,LearningDisabilityOrDownsSyndrome
+23238000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+23315001,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+233678006,SNOMED,Asthma
+233679003,SNOMED,Asthma
+233683003,SNOMED,Asthma
+233703007,SNOMED,PulmonaryHypertensionOrFibrosis
+233817007,SNOMED,CoronaryHeartDisease
+233819005,SNOMED,CoronaryHeartDisease
+233821000,SNOMED,CoronaryHeartDisease
+233823002,SNOMED,CoronaryHeartDisease
+233838001,SNOMED,CoronaryHeartDisease
+233843008,SNOMED,CoronaryHeartDisease
+233846000,SNOMED,CoronaryHeartDisease
+233847009,SNOMED,CoronaryHeartDisease
+233885007,SNOMED,CoronaryHeartDisease
+233911009,SNOMED,AtrialFibrillation
+233947005,SNOMED,PulmonaryHypertensionOrFibrosis
+233958001,SNOMED,PeripheralVascularDisease
+233961000,SNOMED,PeripheralVascularDisease
+234132006,SNOMED,CongenitalHeartProblem
+234434003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+234484005,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+234532001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+234535004,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+234549008,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+234631003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+23560001,SNOMED,LearningDisabilityOrDownsSyndrome
+235714007,SNOMED,InflammatoryBowelDisease
+235895002,SNOMED,LiverCirrhosis
+235896001,SNOMED,LiverCirrhosis
+23687008,SNOMED,CoronaryHeartDisease
+237227006,SNOMED,CongenitalHeartProblem
+237599002,SNOMED,Diabetes
+237604008,SNOMED,Diabetes
+237632004,SNOMED,Diabetes
+237651005,SNOMED,Diabetes
+239791005,SNOMED,RheumatoidArthritisOrSle
+239792003,SNOMED,RheumatoidArthritisOrSle
+239793008,SNOMED,RheumatoidArthritisOrSle
+239796000,SNOMED,RheumatoidArthritisOrSle
+239803008,SNOMED,RheumatoidArthritisOrSle
+239805001,SNOMED,RheumatoidArthritisOrSle
+239887007,SNOMED,RheumatoidArthritisOrSle
+239920006,SNOMED,RheumatoidArthritisOrSle
+240198002,SNOMED,PriorFractureOfHipWristSpineHumerus
+24072005,SNOMED,CancerOfBloodOrBoneMarrow
+241006,SNOMED,Epilepsy
+24700007,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+24743004,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+24751000000101,SNOMED,HousingCategory
+247804008,SNOMED,BipolarDiseaseOrSchizophrenia
+248171000000108,SNOMED,HousingCategory
+249181000000100,SNOMED,Dementia
+25003006,SNOMED,PeripheralVascularDisease
+25093002,SNOMED,Diabetes
+25093002,SNOMED,Diabetes
+25106000,SNOMED,CoronaryHeartDisease
+25109007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+253264007,SNOMED,CongenitalHeartProblem
+253297008,SNOMED,CongenitalHeartProblem
+253321003,SNOMED,CongenitalHeartProblem
+253335001,SNOMED,CongenitalHeartProblem
+253366007,SNOMED,CongenitalHeartProblem
+253514004,SNOMED,CongenitalHeartProblem
+253515003,SNOMED,CongenitalHeartProblem
+253530007,SNOMED,CongenitalHeartProblem
+253546004,SNOMED,CongenitalHeartProblem
+253601007,SNOMED,CongenitalHeartProblem
+253614008,SNOMED,CongenitalHeartProblem
+253615009,SNOMED,CongenitalHeartProblem
+253672004,SNOMED,CongenitalHeartProblem
+253673009,SNOMED,CongenitalHeartProblem
+253674003,SNOMED,CongenitalHeartProblem
+253676001,SNOMED,CongenitalHeartProblem
+253677005,SNOMED,CongenitalHeartProblem
+253680006,SNOMED,CongenitalHeartProblem
+253720000,SNOMED,CongenitalHeartProblem
+253732001,SNOMED,CongenitalHeartProblem
+25415003,SNOMED,PriorFractureOfHipWristSpineHumerus
+254259001,SNOMED,LearningDisabilityOrDownsSyndrome
+254261005,SNOMED,LearningDisabilityOrDownsSyndrome
+254264002,SNOMED,LearningDisabilityOrDownsSyndrome
+254266000,SNOMED,LearningDisabilityOrDownsSyndrome
+254268004,SNOMED,LearningDisabilityOrDownsSyndrome
+254269007,SNOMED,LearningDisabilityOrDownsSyndrome
+254273005,SNOMED,LearningDisabilityOrDownsSyndrome
+254274004,SNOMED,LearningDisabilityOrDownsSyndrome
+254275003,SNOMED,LearningDisabilityOrDownsSyndrome
+254280007,SNOMED,LearningDisabilityOrDownsSyndrome
+254281006,SNOMED,LearningDisabilityOrDownsSyndrome
+254282004,SNOMED,LearningDisabilityOrDownsSyndrome
+254283009,SNOMED,LearningDisabilityOrDownsSyndrome
+254285002,SNOMED,LearningDisabilityOrDownsSyndrome
+254459004,SNOMED,LungOrOralCancer
+254484001,SNOMED,LungOrOralCancer
+25472008,SNOMED,SickleCellViaBool
+255069008,SNOMED,LungOrOralCancer
+2583009,SNOMED,CongenitalHeartProblem
+25897000,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+26025008,SNOMED,BipolarDiseaseOrSchizophrenia
+26298008,SNOMED,Diabetes
+263225007,SNOMED,PriorFractureOfHipWristSpineHumerus
+263229001,SNOMED,PriorFractureOfHipWristSpineHumerus
+263231005,SNOMED,PriorFractureOfHipWristSpineHumerus
+266253001,SNOMED,StrokeOrTia
+266257000,SNOMED,StrokeOrTia
+266267005,SNOMED,ThrombosisOrPulmonaryEmbolus
+266355005,SNOMED,Copd
+266356006,SNOMED,Copd
+266361008,SNOMED,Asthma
+266468003,SNOMED,LiverCirrhosis
+266469006,SNOMED,LiverCirrhosis
+267459007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+267460002,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+267581004,SNOMED,Epilepsy
+26780008,SNOMED,CongenitalHeartProblem
+268040001,SNOMED,PriorFractureOfHipWristSpineHumerus
+268174004,SNOMED,CongenitalHeartProblem
+268180007,SNOMED,CongenitalHeartProblem
+268184003,SNOMED,CongenitalHeartProblem
+268185002,SNOMED,CongenitalHeartProblem
+268294001,SNOMED,LearningDisabilityOrDownsSyndrome
+268391007,SNOMED,LearningDisabilityOrDownsSyndrome
+268519009,SNOMED,Diabetes
+268612007,SNOMED,Dementia
+268617001,SNOMED,BipolarDiseaseOrSchizophrenia
+268619003,SNOMED,BipolarDiseaseOrSchizophrenia
+268672004,SNOMED,LearningDisabilityOrDownsSyndrome
+268673009,SNOMED,LearningDisabilityOrDownsSyndrome
+268674003,SNOMED,LearningDisabilityOrDownsSyndrome
+268734000,SNOMED,LearningDisabilityOrDownsSyndrome
+268738002,SNOMED,LearningDisabilityOrDownsSyndrome
+269061001,SNOMED,PriorFractureOfHipWristSpineHumerus
+269083002,SNOMED,PriorFractureOfHipWristSpineHumerus
+26929004,SNOMED,Dementia
+26938002,SNOMED,PriorFractureOfHipWristSpineHumerus
+269464000,SNOMED,LungOrOralCancer
+269475001,SNOMED,CancerOfBloodOrBoneMarrow
+269476000,SNOMED,CancerOfBloodOrBoneMarrow
+269515006,SNOMED,LungOrOralCancer
+270460000,SNOMED,Ethnicity
+270461001,SNOMED,Ethnicity
+270462008,SNOMED,Ethnicity
+270463003,SNOMED,Ethnicity
+270464009,SNOMED,Ethnicity
+270465005,SNOMED,Ethnicity
+270466006,SNOMED,Ethnicity
+270467002,SNOMED,Ethnicity
+270507001,SNOMED,PriorFractureOfHipWristSpineHumerus
+270508006,SNOMED,PriorFractureOfHipWristSpineHumerus
+270510008,SNOMED,CongenitalHeartProblem
+270520003,SNOMED,LearningDisabilityOrDownsSyndrome
+270521004,SNOMED,LearningDisabilityOrDownsSyndrome
+270889005,SNOMED,LearningDisabilityOrDownsSyndrome
+270890001,SNOMED,LearningDisabilityOrDownsSyndrome
+270901009,SNOMED,BipolarDiseaseOrSchizophrenia
+271323007,SNOMED,LungOrOralCancer
+271428004,SNOMED,BipolarDiseaseOrSchizophrenia
+271440004,SNOMED,LiverCirrhosis
+271568003,SNOMED,LungOrOralCancer
+271573009,SNOMED,CongenitalHeartProblem
+27387000,SNOMED,BipolarDiseaseOrSchizophrenia
+274100004,SNOMED,StrokeOrTia
+274908005,SNOMED,LearningDisabilityOrDownsSyndrome
+274952002,SNOMED,BipolarDiseaseOrSchizophrenia
+2751001,SNOMED,Diabetes
+275263003,SNOMED,LearningDisabilityOrDownsSyndrome
+275264009,SNOMED,LearningDisabilityOrDownsSyndrome
+275338001,SNOMED,PriorFractureOfHipWristSpineHumerus
+275339009,SNOMED,PriorFractureOfHipWristSpineHumerus
+275340006,SNOMED,PriorFractureOfHipWristSpineHumerus
+275341005,SNOMED,PriorFractureOfHipWristSpineHumerus
+275342003,SNOMED,PriorFractureOfHipWristSpineHumerus
+275343008,SNOMED,PriorFractureOfHipWristSpineHumerus
+275399006,SNOMED,LungOrOralCancer
+275503004,SNOMED,Copd
+275514001,SNOMED,HeartFailure
+275524009,SNOMED,CancerOfBloodOrBoneMarrow
+275549008,SNOMED,InflammatoryBowelDisease
+275586009,SNOMED,Ethnicity
+275587000,SNOMED,Ethnicity
+275588005,SNOMED,Ethnicity
+275589002,SNOMED,Ethnicity
+275590006,SNOMED,Ethnicity
+275591005,SNOMED,Ethnicity
+275592003,SNOMED,Ethnicity
+275593008,SNOMED,Ethnicity
+275594002,SNOMED,Ethnicity
+275595001,SNOMED,Ethnicity
+275596000,SNOMED,Ethnicity
+275597009,SNOMED,Ethnicity
+275599007,SNOMED,Ethnicity
+275600005,SNOMED,Ethnicity
+275601009,SNOMED,Ethnicity
+275602002,SNOMED,Ethnicity
+27637000,SNOMED,CongenitalHeartProblem
+276517000,SNOMED,CongenitalHeartProblem
+276854003,SNOMED,LearningDisabilityOrDownsSyndrome
+277473004,SNOMED,CancerOfBloodOrBoneMarrow
+277567002,SNOMED,CancerOfBloodOrBoneMarrow
+277571004,SNOMED,CancerOfBloodOrBoneMarrow
+277577000,SNOMED,CancerOfBloodOrBoneMarrow
+277597005,SNOMED,CancerOfBloodOrBoneMarrow
+2776000,SNOMED,Dementia
+277601005,SNOMED,CancerOfBloodOrBoneMarrow
+277606000,SNOMED,CancerOfBloodOrBoneMarrow
+277613000,SNOMED,CancerOfBloodOrBoneMarrow
+277615007,SNOMED,CancerOfBloodOrBoneMarrow
+277619001,SNOMED,CancerOfBloodOrBoneMarrow
+277622004,SNOMED,CancerOfBloodOrBoneMarrow
+277625002,SNOMED,CancerOfBloodOrBoneMarrow
+277641001,SNOMED,CancerOfBloodOrBoneMarrow
+277654008,SNOMED,CancerOfBloodOrBoneMarrow
+278065000,SNOMED,LungOrOralCancer
+278512001,SNOMED,CerebralPalsy
+279982005,SNOMED,Dementia
+28055006,SNOMED,Epilepsy
+281004,SNOMED,Dementia
+282825002,SNOMED,AtrialFibrillation
+28475009,SNOMED,BipolarDiseaseOrSchizophrenia
+28536002,SNOMED,InflammatoryBowelDisease
+28574005,SNOMED,CongenitalHeartProblem
+28576007,SNOMED,PriorFractureOfHipWristSpineHumerus
+28656008,SNOMED,CongenitalHeartProblem
+287006005,SNOMED,RheumatoidArthritisOrSle
+28950004,SNOMED,CancerOfBloodOrBoneMarrow
+290002008,SNOMED,Diabetes
+293991000000106,SNOMED,Copd
+295046003,SNOMED,InflammatoryBowelDisease
+29633007,SNOMED,LiverCirrhosis
+297156001,SNOMED,ThrombosisOrPulmonaryEmbolus
+29928006,SNOMED,CongenitalHeartProblem
+299701000000103,SNOMED,HousingCategory
+300995000,SNOMED,CoronaryHeartDisease
+302815008,SNOMED,LungOrOralCancer
+302842009,SNOMED,CancerOfBloodOrBoneMarrow
+302855005,SNOMED,CancerOfBloodOrBoneMarrow
+30288003,SNOMED,CongenitalHeartProblem
+304914007,SNOMED,CoronaryHeartDisease
+307140009,SNOMED,CoronaryHeartDisease
+307356008,SNOMED,Epilepsy
+307357004,SNOMED,Epilepsy
+307417003,SNOMED,BipolarDiseaseOrSchizophrenia
+307504004,SNOMED,BipolarDiseaseOrSchizophrenia
+307651005,SNOMED,CancerOfBloodOrBoneMarrow
+307756005,SNOMED,CerebralPalsy
+307766002,SNOMED,StrokeOrTia
+307767006,SNOMED,StrokeOrTia
+308121000,SNOMED,CancerOfBloodOrBoneMarrow
+308129003,SNOMED,LiverCirrhosis
+308143008,SNOMED,RheumatoidArthritisOrSle
+308145001,SNOMED,PriorFractureOfHipWristSpineHumerus
+308756007,SNOMED,PriorFractureOfHipWristSpineHumerus
+308757003,SNOMED,PriorFractureOfHipWristSpineHumerus
+308758008,SNOMED,PriorFractureOfHipWristSpineHumerus
+30962008,SNOMED,CancerOfBloodOrBoneMarrow
+309643000,SNOMED,Ethnicity
+309644006,SNOMED,Ethnicity
+309762007,SNOMED,RheumatoidArthritisOrSle
+309783001,SNOMED,LiverCirrhosis
+31027006,SNOMED,BipolarDiseaseOrSchizophrenia
+311792005,SNOMED,CoronaryHeartDisease
+311793000,SNOMED,CoronaryHeartDisease
+311796008,SNOMED,CoronaryHeartDisease
+311806008,SNOMED,PriorFractureOfHipWristSpineHumerus
+311814002,SNOMED,PriorFractureOfHipWristSpineHumerus
+311890007,SNOMED,PriorFractureOfHipWristSpineHumerus
+311891006,SNOMED,PriorFractureOfHipWristSpineHumerus
+31211000119101,SNOMED,Diabetes
+31216003,SNOMED,LearningDisabilityOrDownsSyndrome
+312377009,SNOMED,PeripheralVascularDisease
+312380005,SNOMED,PeripheralVascularDisease
+312453004,SNOMED,Asthma
+312621002,SNOMED,LearningDisabilityOrDownsSyndrome
+312859007,SNOMED,Ethnicity
+31323000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+313296004,SNOMED,Copd
+313297008,SNOMED,Copd
+313299006,SNOMED,Copd
+313427003,SNOMED,CancerOfBloodOrBoneMarrow
+313435000,SNOMED,Diabetes
+313436004,SNOMED,Diabetes
+31373002,SNOMED,BipolarDiseaseOrSchizophrenia
+31387002,SNOMED,Asthma
+314116003,SNOMED,CoronaryHeartDisease
+31446002,SNOMED,BipolarDiseaseOrSchizophrenia
+314771006,SNOMED,Diabetes
+314893005,SNOMED,Diabetes
+314902007,SNOMED,Diabetes
+314903002,SNOMED,Diabetes
+314904008,SNOMED,Diabetes
+315025001,SNOMED,CoronaryHeartDisease
+315026000,SNOMED,CoronaryHeartDisease
+315236000,SNOMED,Ethnicity
+315237009,SNOMED,Ethnicity
+315279003,SNOMED,Ethnicity
+315281001,SNOMED,Ethnicity
+315283003,SNOMED,Ethnicity
+315348000,SNOMED,CoronaryHeartDisease
+315634007,SNOMED,Ethnicity
+315635008,SNOMED,Ethnicity
+315638005,SNOMED,LearningDisabilityOrDownsSyndrome
+31658008,SNOMED,BipolarDiseaseOrSchizophrenia
+31712002,SNOMED,LiverCirrhosis
+31758001,SNOMED,Epilepsy
+32280000,SNOMED,CancerOfBloodOrBoneMarrow
+324251000000105,SNOMED,ChronicKidneyDisease3
+324281000000104,SNOMED,ChronicKidneyDisease3
+324311000000101,SNOMED,ChronicKidneyDisease3
+324341000000100,SNOMED,ChronicKidneyDisease3
+324371000000106,SNOMED,ChronicKidneyDisease3
+324411000000105,SNOMED,ChronicKidneyDisease3
+324441000000106,SNOMED,ChronicKidneyDisease4
+324471000000100,SNOMED,ChronicKidneyDisease4
+324501000000107,SNOMED,ChronicKidneyDisease5
+324541000000105,SNOMED,ChronicKidneyDisease5
+32911000,SNOMED,HousingCategory
+33192001,SNOMED,PriorFractureOfHipWristSpineHumerus
+33719002,SNOMED,RheumatoidArthritisOrSle
+33897005,SNOMED,Ethnicity
+34000006,SNOMED,InflammatoryBowelDisease
+341751000000103,SNOMED,CongenitalHeartProblem
+34781003,SNOMED,StrokeOrTia
+35111009,SNOMED,LearningDisabilityOrDownsSyndrome
+35252006,SNOMED,BipolarDiseaseOrSchizophrenia
+352818000,SNOMED,Epilepsy
+35287006,SNOMED,CancerOfBloodOrBoneMarrow
+35434009,SNOMED,SickleCellViaBool
+35919005,SNOMED,LearningDisabilityOrDownsSyndrome
+35928006,SNOMED,CoronaryHeartDisease
+359820003,SNOMED,PriorFractureOfHipWristSpineHumerus
+36070007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+36110001,SNOMED,CongenitalHeartProblem
+361119006,SNOMED,PriorFractureOfHipWristSpineHumerus
+361123003,SNOMED,Epilepsy
+361268000,SNOMED,Epilepsy
+36233006,SNOMED,CongenitalHeartProblem
+363348004,SNOMED,LungOrOralCancer
+363358000,SNOMED,LungOrOralCancer
+363360003,SNOMED,LungOrOralCancer
+363372009,SNOMED,LungOrOralCancer
+363373004,SNOMED,LungOrOralCancer
+363374005,SNOMED,LungOrOralCancer
+363375006,SNOMED,LungOrOralCancer
+363376007,SNOMED,LungOrOralCancer
+363377003,SNOMED,LungOrOralCancer
+363378008,SNOMED,LungOrOralCancer
+363379000,SNOMED,LungOrOralCancer
+363380002,SNOMED,LungOrOralCancer
+363381003,SNOMED,LungOrOralCancer
+363382005,SNOMED,LungOrOralCancer
+363383000,SNOMED,LungOrOralCancer
+363384006,SNOMED,LungOrOralCancer
+363385007,SNOMED,LungOrOralCancer
+363386008,SNOMED,LungOrOralCancer
+363387004,SNOMED,LungOrOralCancer
+363388009,SNOMED,LungOrOralCancer
+363389001,SNOMED,LungOrOralCancer
+363390005,SNOMED,LungOrOralCancer
+363391009,SNOMED,LungOrOralCancer
+363392002,SNOMED,LungOrOralCancer
+363393007,SNOMED,LungOrOralCancer
+363394001,SNOMED,LungOrOralCancer
+363395000,SNOMED,LungOrOralCancer
+363396004,SNOMED,LungOrOralCancer
+363397008,SNOMED,LungOrOralCancer
+363398003,SNOMED,LungOrOralCancer
+363399006,SNOMED,LungOrOralCancer
+363400004,SNOMED,LungOrOralCancer
+363401000,SNOMED,LungOrOralCancer
+363432004,SNOMED,LungOrOralCancer
+363505006,SNOMED,LungOrOralCancer
+363507003,SNOMED,LungOrOralCancer
+36422005,SNOMED,CongenitalHeartProblem
+367363000,SNOMED,HeartFailure
+367515004,SNOMED,LearningDisabilityOrDownsSyndrome
+370220003,SNOMED,Asthma
+370221004,SNOMED,Asthma
+371068009,SNOMED,CoronaryHeartDisease
+37151006,SNOMED,PeripheralVascularDisease
+371596008,SNOMED,BipolarDiseaseOrSchizophrenia
+372065009,SNOMED,LungOrOralCancer
+372148003,SNOMED,Ethnicity
+3723001,SNOMED,RheumatoidArthritisOrSle
+37340000,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+37471005,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+37810007,SNOMED,CancerOfBloodOrBoneMarrow
+38106008,SNOMED,InflammatoryBowelDisease
+3815005,SNOMED,InflammatoryBowelDisease
+38385001,SNOMED,CongenitalHeartProblem
+385041000000108,SNOMED,Diabetes
+386701004,SNOMED,LearningDisabilityOrDownsSyndrome
+38804009,SNOMED,LearningDisabilityOrDownsSyndrome
+389145006,SNOMED,Asthma
+39058009,SNOMED,Diabetes
+394659003,SNOMED,CoronaryHeartDisease
+394923006,SNOMED,HousingCategory
+395204000,SNOMED,Diabetes
+395704004,SNOMED,HeartFailure
+397009000,SNOMED,CancerOfBloodOrBoneMarrow
+39710007,SNOMED,Diabetes
+398055000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+398271008,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+398274000,SNOMED,CoronaryHeartDisease
+398293003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+398623004,SNOMED,CancerOfBloodOrBoneMarrow
+398640008,SNOMED,RheumatoidArthritisOrSle
+398726004,SNOMED,RheumatoidArthritisOrSle
+399112009,SNOMED,RheumatoidArthritisOrSle
+399126000,SNOMED,LiverCirrhosis
+399211009,SNOMED,CoronaryHeartDisease
+399957001,SNOMED,PeripheralVascularDisease
+400047006,SNOMED,PeripheralVascularDisease
+400054000,SNOMED,RheumatoidArthritisOrSle
+400122007,SNOMED,CancerOfBloodOrBoneMarrow
+400998002,SNOMED,BipolarDiseaseOrSchizophrenia
+40100001,SNOMED,Copd
+401110002,SNOMED,Diabetes
+401193004,SNOMED,Asthma
+401213008,SNOMED,Ethnicity
+401214002,SNOMED,Ethnicity
+401303003,SNOMED,CoronaryHeartDisease
+401314000,SNOMED,CoronaryHeartDisease
+401315004,SNOMED,LearningDisabilityOrDownsSyndrome
+404133000,SNOMED,CancerOfBloodOrBoneMarrow
+404223003,SNOMED,ThrombosisOrPulmonaryEmbolus
+404807005,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+40541001,SNOMED,HeartFailure
+405720007,SNOMED,Asthma
+405769009,SNOMED,LearningDisabilityOrDownsSyndrome
+405944004,SNOMED,Asthma
+40700009,SNOMED,LearningDisabilityOrDownsSyndrome
+407674008,SNOMED,Asthma
+407675009,SNOMED,Epilepsy
+408371000000100,SNOMED,CerebralPalsy
+408539000,SNOMED,Diabetes
+408540003,SNOMED,Diabetes
+408856003,SNOMED,LearningDisabilityOrDownsSyndrome
+408857007,SNOMED,LearningDisabilityOrDownsSyndrome
+408858002,SNOMED,LearningDisabilityOrDownsSyndrome
+409709004,SNOMED,LearningDisabilityOrDownsSyndrome
+41036008,SNOMED,PriorFractureOfHipWristSpineHumerus
+41040004,SNOMED,LearningDisabilityOrDownsSyndrome
+410793008,SNOMED,RheumatoidArthritisOrSle
+410795001,SNOMED,RheumatoidArthritisOrSle
+410797009,SNOMED,RheumatoidArthritisOrSle
+41191003,SNOMED,PriorFractureOfHipWristSpineHumerus
+41266007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+412787009,SNOMED,CongenitalHeartProblem
+413101007,SNOMED,Epilepsy
+413102000,SNOMED,StrokeOrTia
+413183008,SNOMED,Diabetes
+413184002,SNOMED,Diabetes
+413428007,SNOMED,PriorFractureOfHipWristSpineHumerus
+413440007,SNOMED,CancerOfBloodOrBoneMarrow
+413441006,SNOMED,CancerOfBloodOrBoneMarrow
+413838009,SNOMED,CoronaryHeartDisease
+413844008,SNOMED,CoronaryHeartDisease
+413875004,SNOMED,PriorFractureOfHipWristSpineHumerus
+413956008,SNOMED,ThrombosisOrPulmonaryEmbolus
+414029004,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+414153008,SNOMED,InflammatoryBowelDisease
+414154002,SNOMED,InflammatoryBowelDisease
+414156000,SNOMED,InflammatoryBowelDisease
+414166008,SNOMED,CancerOfBloodOrBoneMarrow
+414481008,SNOMED,Ethnicity
+414545008,SNOMED,CoronaryHeartDisease
+414564002,SNOMED,PriorFractureOfHipWristSpineHumerus
+415112005,SNOMED,CancerOfBloodOrBoneMarrow
+41553006,SNOMED,Asthma
+416075005,SNOMED,LearningDisabilityOrDownsSyndrome
+416180004,SNOMED,SickleCellViaBool
+416780008,SNOMED,Dementia
+416975007,SNOMED,Dementia
+417357006,SNOMED,SickleCellViaBool
+417373000,SNOMED,RheumatoidArthritisOrSle
+417425009,SNOMED,SickleCellViaBool
+417601000000102,SNOMED,BipolarDiseaseOrSchizophrenia
+418130002,SNOMED,InflammatoryBowelDisease
+41836007,SNOMED,BipolarDiseaseOrSchizophrenia
+419728003,SNOMED,LiverCirrhosis
+419955002,SNOMED,HousingCategory
+420054005,SNOMED,LiverCirrhosis
+420270002,SNOMED,Diabetes
+420279001,SNOMED,Diabetes
+420300004,SNOMED,HeartFailure
+420403001,SNOMED,HivOrAids
+420422005,SNOMED,Diabetes
+420436000,SNOMED,Diabetes
+420486006,SNOMED,Diabetes
+420514000,SNOMED,Diabetes
+420524008,SNOMED,HivOrAids
+420662003,SNOMED,Diabetes
+420683009,SNOMED,Diabetes
+420715001,SNOMED,Diabetes
+420756003,SNOMED,Diabetes
+420789003,SNOMED,Diabetes
+420818005,SNOMED,HivOrAids
+420825003,SNOMED,Diabetes
+420868002,SNOMED,Diabetes
+420913000,SNOMED,HeartFailure
+420918009,SNOMED,Diabetes
+420996007,SNOMED,Diabetes
+421075007,SNOMED,Diabetes
+421249001,SNOMED,LungOrOralCancer
+421256007,SNOMED,Diabetes
+421326000,SNOMED,Diabetes
+421365002,SNOMED,Diabetes
+421468001,SNOMED,Diabetes
+421529006,SNOMED,Dementia
+421529006,SNOMED,HivOrAids
+42157000,SNOMED,PriorFractureOfHipWristSpineHumerus
+421631007,SNOMED,Diabetes
+421671002,SNOMED,HivOrAids
+421704003,SNOMED,HeartFailure
+421750000,SNOMED,Diabetes
+421779007,SNOMED,Diabetes
+421847006,SNOMED,Diabetes
+421893009,SNOMED,Diabetes
+421895002,SNOMED,Diabetes
+421895002,SNOMED,Diabetes
+421920002,SNOMED,Diabetes
+421986006,SNOMED,Diabetes
+422003001,SNOMED,HivOrAids
+422014003,SNOMED,Diabetes
+422034002,SNOMED,Diabetes
+422088007,SNOMED,Diabetes
+422088007,SNOMED,Diabetes
+422099009,SNOMED,Diabetes
+422126006,SNOMED,Diabetes
+422166005,SNOMED,Diabetes
+422228004,SNOMED,Diabetes
+422275004,SNOMED,Diabetes
+422275004,SNOMED,Diabetes
+422293003,SNOMED,HeartFailure
+4223005,SNOMED,ParkinsonsDisease
+42343007,SNOMED,HeartFailure
+424643009,SNOMED,Asthma
+42531007,SNOMED,CoronaryHeartDisease
+425333006,SNOMED,CancerOfBloodOrBoneMarrow
+425390006,SNOMED,Dementia
+425390006,SNOMED,ParkinsonsDisease
+425500002,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+426202004,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+42636007,SNOMED,PriorFractureOfHipWristSpineHumerus
+426373005,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+426611007,SNOMED,HeartFailure
+42665001,SNOMED,HousingCategory
+426749004,SNOMED,AtrialFibrillation
+426875007,SNOMED,Diabetes
+427022004,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+427665004,SNOMED,AtrialFibrillation
+427921000000108,SNOMED,HivOrAids
+42868002,SNOMED,BipolarDiseaseOrSchizophrenia
+428700003,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+429098002,SNOMED,ThrombosisOrPulmonaryEmbolus
+429124005,SNOMED,BipolarDiseaseOrSchizophrenia
+429192004,SNOMED,RheumatoidArthritisOrSle
+429458009,SNOMED,Dementia
+429998004,SNOMED,Dementia
+430621000,SNOMED,LungOrOralCancer
+431857002,SNOMED,ChronicKidneyDisease4
+432504007,SNOMED,StrokeOrTia
+433144002,SNOMED,ChronicKidneyDisease3
+433146000,SNOMED,ChronicKidneyDisease5
+43614003,SNOMED,LearningDisabilityOrDownsSyndrome
+43736008,SNOMED,HeartFailure
+4374004,SNOMED,CongenitalHeartProblem
+43752006,SNOMED,InflammatoryBowelDisease
+438511000,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+438647008,SNOMED,ThrombosisOrPulmonaryEmbolus
+438773007,SNOMED,ThrombosisOrPulmonaryEmbolus
+43904005,SNOMED,LiverCirrhosis
+439567002,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+43959009,SNOMED,Diabetes
+440028005,SNOMED,AtrialFibrillation
+440059007,SNOMED,AtrialFibrillation
+44054006,SNOMED,Diabetes
+44145005,SNOMED,Epilepsy
+441482006,SNOMED,SickleCellViaBool
+441704009,SNOMED,BipolarDiseaseOrSchizophrenia
+442059001,SNOMED,LearningDisabilityOrDownsSyndrome
+442344002,SNOMED,Dementia
+442537007,SNOMED,HivOrAids
+443210003,SNOMED,ThrombosisOrPulmonaryEmbolus
+4434006,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+443487006,SNOMED,CancerOfBloodOrBoneMarrow
+443502000,SNOMED,CoronaryHeartDisease
+443694000,SNOMED,Diabetes
+444073006,SNOMED,Diabetes
+4441000,SNOMED,BipolarDiseaseOrSchizophrenia
+444548001,SNOMED,InflammatoryBowelDisease
+444655009,SNOMED,LearningDisabilityOrDownsSyndrome
+444910004,SNOMED,CancerOfBloodOrBoneMarrow
+445105005,SNOMED,CancerOfBloodOrBoneMarrow
+445243001,SNOMED,InflammatoryBowelDisease
+445269007,SNOMED,CancerOfBloodOrBoneMarrow
+445406001,SNOMED,CancerOfBloodOrBoneMarrow
+445448008,SNOMED,CancerOfBloodOrBoneMarrow
+446643000,SNOMED,CancerOfBloodOrBoneMarrow
+448212009,SNOMED,CancerOfBloodOrBoneMarrow
+448868009,SNOMED,LungOrOralCancer
+449108003,SNOMED,CancerOfBloodOrBoneMarrow
+449220000,SNOMED,CancerOfBloodOrBoneMarrow
+449386007,SNOMED,CancerOfBloodOrBoneMarrow
+44940001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+4506002,SNOMED,LearningDisabilityOrDownsSyndrome
+45145000,SNOMED,Copd
+45237002,SNOMED,CongenitalHeartProblem
+45492009,SNOMED,CongenitalHeartProblem
+4557003,SNOMED,CoronaryHeartDisease
+45864009,SNOMED,Dementia
+46085004,SNOMED,ThrombosisOrPulmonaryEmbolus
+46109009,SNOMED,CoronaryHeartDisease
+461105005,SNOMED,CongenitalHeartProblem
+46177005,SNOMED,ChronicKidneyDisease5
+46206005,SNOMED,BipolarDiseaseOrSchizophrenia
+46635009,SNOMED,Diabetes
+47024008,SNOMED,SickleCellViaBool
+474391000006106,SNOMED,HivOrAids
+474401000006108,SNOMED,HivOrAids
+47986005,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+48121000,SNOMED,CongenitalHeartProblem
+48347002,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+48520006,SNOMED,CongenitalHeartProblem
+4855003,SNOMED,Diabetes
+48721008,SNOMED,CerebralPalsy
+49049000,SNOMED,ParkinsonsDisease
+4926007,SNOMED,BipolarDiseaseOrSchizophrenia
+494131000000105,SNOMED,Ethnicity
+494161000000100,SNOMED,Ethnicity
+49422009,SNOMED,StrokeOrTia
+49436004,SNOMED,AtrialFibrillation
+49455004,SNOMED,Diabetes
+49455004,SNOMED,Diabetes
+49512000,SNOMED,BipolarDiseaseOrSchizophrenia
+4981000,SNOMED,Copd
+50397009,SNOMED,PriorFractureOfHipWristSpineHumerus
+50440006,SNOMED,InflammatoryBowelDisease
+504931000000103,SNOMED,HivOrAids
+50749006,SNOMED,LearningDisabilityOrDownsSyndrome
+508171000000105,SNOMED,LearningDisabilityOrDownsSyndrome
+50866000,SNOMED,Epilepsy
+50926003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+509341000000107,SNOMED,Epilepsy
+51002006,SNOMED,Diabetes
+51092000,SNOMED,CancerOfBloodOrBoneMarrow
+51500006,SNOMED,LearningDisabilityOrDownsSyndrome
+51615001,SNOMED,PulmonaryHypertensionOrFibrosis
+52035003,SNOMED,CoronaryHeartDisease
+52201006,SNOMED,StrokeOrTia
+52220008,SNOMED,CancerOfBloodOrBoneMarrow
+52231000,SNOMED,InflammatoryBowelDisease
+5230009,SNOMED,CongenitalHeartProblem
+52333004,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+52403007,SNOMED,PeripheralVascularDisease
+52448006,SNOMED,Dementia
+52506002,SNOMED,InflammatoryBowelDisease
+52571006,SNOMED,Copd
+526071000000104,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+526091000000100,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+5294002,SNOMED,LearningDisabilityOrDownsSyndrome
+53049002,SNOMED,BipolarDiseaseOrSchizophrenia
+532411000000102,SNOMED,Diabetes
+534791000000107,SNOMED,LungOrOralCancer
+536101000000106,SNOMED,CancerOfBloodOrBoneMarrow
+53741008,SNOMED,CoronaryHeartDisease
+539691000000104,SNOMED,CancerOfBloodOrBoneMarrow
+54072008,SNOMED,RheumatoidArthritisOrSle
+54087003,SNOMED,CancerOfBloodOrBoneMarrow
+54160000,SNOMED,CongenitalHeartProblem
+542621000000109,SNOMED,CancerOfBloodOrBoneMarrow
+54304004,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+54329005,SNOMED,CoronaryHeartDisease
+54682008,SNOMED,CongenitalHeartProblem
+55342001,SNOMED,CancerOfBloodOrBoneMarrow
+55464009,SNOMED,RheumatoidArthritisOrSle
+55510008,SNOMED,CongenitalHeartProblem
+55602000,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+56267009,SNOMED,Dementia
+56287005,SNOMED,InflammatoryBowelDisease
+56675007,SNOMED,HeartFailure
+56689002,SNOMED,InflammatoryBowelDisease
+56968009,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+56968009,SNOMED,Asthma
+5703000,SNOMED,BipolarDiseaseOrSchizophrenia
+57054005,SNOMED,CoronaryHeartDisease
+57105000,SNOMED,PeripheralVascularDisease
+57160007,SNOMED,RheumatoidArthritisOrSle
+57607007,SNOMED,Asthma
+58193001,SNOMED,CerebralPalsy
+58214004,SNOMED,BipolarDiseaseOrSchizophrenia
+583731000000103,SNOMED,PeripheralVascularDisease
+584181000000100,SNOMED,StrokeOrTia
+58612006,SNOMED,CoronaryHeartDisease
+58756001,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+587851000000108,SNOMED,ThrombosisOrPulmonaryEmbolus
+59021001,SNOMED,CoronaryHeartDisease
+5913000,SNOMED,PriorFractureOfHipWristSpineHumerus
+59282003,SNOMED,ThrombosisOrPulmonaryEmbolus
+59877000,SNOMED,CongenitalHeartProblem
+60743005,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+60787001,SNOMED,CongenitalHeartProblem
+609561005,SNOMED,Diabetes
+609562003,SNOMED,Diabetes
+61152003,SNOMED,LearningDisabilityOrDownsSyndrome
+611541000000106,SNOMED,Copd
+61403008,SNOMED,BipolarDiseaseOrSchizophrenia
+61683000,SNOMED,StrokeOrTia
+6183001,SNOMED,LiverCirrhosis
+61937009,SNOMED,Copd
+6204001,SNOMED,Epilepsy
+62067003,SNOMED,CongenitalHeartProblem
+621601000000104,SNOMED,CoronaryHeartDisease
+62335009,SNOMED,CongenitalHeartProblem
+62479008,SNOMED,HivOrAids
+62695002,SNOMED,CoronaryHeartDisease
+63042009,SNOMED,CongenitalHeartProblem
+630521000000101,SNOMED,Diabetes
+63088003,SNOMED,Asthma
+63181006,SNOMED,BipolarDiseaseOrSchizophrenia
+63249007,SNOMED,BipolarDiseaseOrSchizophrenia
+63364005,SNOMED,CancerOfBloodOrBoneMarrow
+634651000000103,SNOMED,CancerOfBloodOrBoneMarrow
+63480004,SNOMED,Copd
+63491006,SNOMED,PeripheralVascularDisease
+63934006,SNOMED,CongenitalHeartProblem
+64009001,SNOMED,StrokeOrTia
+643861000000100,SNOMED,CoronaryHeartDisease
+646351000000103,SNOMED,PeripheralVascularDisease
+64662007,SNOMED,ThrombosisOrPulmonaryEmbolus
+646631000000101,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+64766004,SNOMED,InflammatoryBowelDisease
+64905009,SNOMED,BipolarDiseaseOrSchizophrenia
+65120008,SNOMED,Epilepsy
+65399007,SNOMED,CancerOfBloodOrBoneMarrow
+65547006,SNOMED,CoronaryHeartDisease
+658011000000104,SNOMED,Diabetes
+658061000000102,SNOMED,Diabetes
+65880007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+66189004,SNOMED,CoronaryHeartDisease
+662401000000102,SNOMED,CancerOfBloodOrBoneMarrow
+662411000000100,SNOMED,CancerOfBloodOrBoneMarrow
+662421000000106,SNOMED,CancerOfBloodOrBoneMarrow
+662431000000108,SNOMED,CancerOfBloodOrBoneMarrow
+662441000000104,SNOMED,CancerOfBloodOrBoneMarrow
+662481000000107,SNOMED,CancerOfBloodOrBoneMarrow
+66403007,SNOMED,CongenitalHeartProblem
+66651005,SNOMED,LearningDisabilityOrDownsSyndrome
+67242002,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+67278007,SNOMED,CongenitalHeartProblem
+674461000000100,SNOMED,PriorFractureOfHipWristSpineHumerus
+68237008,SNOMED,CongenitalHeartProblem
+682621000000105,SNOMED,StrokeOrTia
+68328006,SNOMED,Copd
+68333005,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+685631000000102,SNOMED,StrokeOrTia
+68618008,SNOMED,LearningDisabilityOrDownsSyndrome
+686511000000102,SNOMED,LearningDisabilityOrDownsSyndrome
+68890003,SNOMED,BipolarDiseaseOrSchizophrenia
+68995007,SNOMED,BipolarDiseaseOrSchizophrenia
+690131000000103,SNOMED,ThrombosisOrPulmonaryEmbolus
+69077002,SNOMED,CancerOfBloodOrBoneMarrow
+69339004,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+69896004,SNOMED,RheumatoidArthritisOrSle
+699433000,SNOMED,HivOrAids
+700250006,SNOMED,PulmonaryHypertensionOrFibrosis
+700378005,SNOMED,ChronicKidneyDisease3
+700379002,SNOMED,ChronicKidneyDisease3
+70142008,SNOMED,CongenitalHeartProblem
+70173007,SNOMED,LearningDisabilityOrDownsSyndrome
+70211005,SNOMED,CoronaryHeartDisease
+702526004,SNOMED,HousingCategory
+702575003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+70320004,SNOMED,CongenitalHeartProblem
+7033004,SNOMED,Epilepsy
+703538003,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+70422006,SNOMED,CoronaryHeartDisease
+707621005,SNOMED,CerebralPalsy
+708038006,SNOMED,Asthma
+708090002,SNOMED,Asthma
+708093000,SNOMED,Asthma
+708094006,SNOMED,Asthma
+70995007,SNOMED,PulmonaryHypertensionOrFibrosis
+710008008,SNOMED,LearningDisabilityOrDownsSyndrome
+710010005,SNOMED,LearningDisabilityOrDownsSyndrome
+710019006,SNOMED,LearningDisabilityOrDownsSyndrome
+710167004,SNOMED,ThrombosisOrPulmonaryEmbolus
+710621000006106,SNOMED,LearningDisabilityOrDownsSyndrome
+712850003,SNOMED,BipolarDiseaseOrSchizophrenia
+713572001,SNOMED,HivOrAids
+713702000,SNOMED,Diabetes
+713703005,SNOMED,Diabetes
+713705003,SNOMED,Diabetes
+713706002,SNOMED,Diabetes
+713897006,SNOMED,HivOrAids
+71444005,SNOMED,StrokeOrTia
+71771000119100,SNOMED,Diabetes
+71892000,SNOMED,HeartFailure
+719216001,SNOMED,Diabetes
+71961003,SNOMED,LearningDisabilityOrDownsSyndrome
+720448006,SNOMED,AtrialFibrillation
+72092001,SNOMED,CoronaryHeartDisease
+72242008,SNOMED,CongenitalHeartProblem
+72352009,SNOMED,CongenitalHeartProblem
+72991005,SNOMED,LearningDisabilityOrDownsSyndrome
+7305005,SNOMED,CongenitalHeartProblem
+73211009,SNOMED,Diabetes
+73211009,SNOMED,Diabetes
+732923001,SNOMED,StrokeOrTia
+73448002,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+734904007,SNOMED,Asthma
+7368005,SNOMED,CongenitalHeartProblem
+736962007,SNOMED,CongenitalHeartProblem
+736963002,SNOMED,CongenitalHeartProblem
+736964008,SNOMED,CongenitalHeartProblem
+736965009,SNOMED,CongenitalHeartProblem
+7379000,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+73795002,SNOMED,CoronaryHeartDisease
+738770003,SNOMED,CancerOfBloodOrBoneMarrow
+739681000,SNOMED,Diabetes
+74345006,SNOMED,LearningDisabilityOrDownsSyndrome
+7438000,SNOMED,CongenitalHeartProblem
+74391003,SNOMED,RheumatoidArthritisOrSle
+74417001,SNOMED,Copd
+74561007,SNOMED,CongenitalHeartProblem
+74627003,SNOMED,Diabetes
+74669004,SNOMED,LiverCirrhosis
+74725000,SNOMED,PeripheralVascularDisease
+7484005,SNOMED,CongenitalHeartProblem
+75019001,SNOMED,CerebralPalsy
+75023009,SNOMED,Epilepsy
+75038005,SNOMED,StrokeOrTia
+751371000000107,SNOMED,StrokeOrTia
+75270000,SNOMED,CongenitalHeartProblem
+75524006,SNOMED,Diabetes
+75543006,SNOMED,StrokeOrTia
+75822003,SNOMED,RheumatoidArthritisOrSle
+760721000000109,SNOMED,BipolarDiseaseOrSchizophrenia
+7620006,SNOMED,InflammatoryBowelDisease
+76301009,SNOMED,LiverCirrhosis
+76349003,SNOMED,LearningDisabilityOrDownsSyndrome
+763625008,SNOMED,LearningDisabilityOrDownsSyndrome
+764591000000108,SNOMED,BipolarDiseaseOrSchizophrenia
+764621000000106,SNOMED,BipolarDiseaseOrSchizophrenia
+764641000000104,SNOMED,BipolarDiseaseOrSchizophrenia
+764671000000105,SNOMED,BipolarDiseaseOrSchizophrenia
+764731000000103,SNOMED,BipolarDiseaseOrSchizophrenia
+765145001,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+765176007,SNOMED,BipolarDiseaseOrSchizophrenia
+76593002,SNOMED,CoronaryHeartDisease
+767263007,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+767263007,SNOMED,LearningDisabilityOrDownsSyndrome
+7713009,SNOMED,StrokeOrTia
+77430005,SNOMED,CancerOfBloodOrBoneMarrow
+77593006,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+77690003,SNOMED,Copd
+776981000000103,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+776981000000103,SNOMED,LiverCirrhosis
+77788005,SNOMED,PeripheralVascularDisease
+78250005,SNOMED,CongenitalHeartProblem
+78569004,SNOMED,StrokeOrTia
+78643003,SNOMED,CongenitalHeartProblem
+79009004,SNOMED,CoronaryHeartDisease
+79256006,SNOMED,PeripheralVascularDisease
+79439001,SNOMED,CongenitalHeartProblem
+79584002,SNOMED,BipolarDiseaseOrSchizophrenia
+79745005,SNOMED,Epilepsy
+79866005,SNOMED,BipolarDiseaseOrSchizophrenia
+80098002,SNOMED,Dementia
+80387009,SNOMED,CongenitalHeartProblem
+80411001,SNOMED,PriorFractureOfHipWristSpineHumerus
+80570006,SNOMED,CancerOfBloodOrBoneMarrow
+81000119104,SNOMED,HivOrAids
+81211007,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+813921000000104,SNOMED,CerebralPalsy
+81423003,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+815361000000107,SNOMED,CancerOfBloodOrBoneMarrow
+81990004,SNOMED,CongenitalHeartProblem
+820601000000103,SNOMED,CancerOfBloodOrBoneMarrow
+82286005,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+82385007,SNOMED,ThrombosisOrPulmonaryEmbolus
+82458004,SNOMED,CongenitalHeartProblem
+825881000006105,SNOMED,HivOrAids
+825891000006108,SNOMED,HivOrAids
+831231000006108,SNOMED,LearningDisabilityOrDownsSyndrome
+83225003,SNOMED,BipolarDiseaseOrSchizophrenia
+83746006,SNOMED,BipolarDiseaseOrSchizophrenia
+83799000,SNOMED,CongenitalHeartProblem
+84017003,SNOMED,RheumatoidArthritisOrSle
+84114007,SNOMED,HeartFailure
+84138006,SNOMED,PriorFractureOfHipWristSpineHumerus
+84409004,SNOMED,Copd
+847481000000109,SNOMED,CancerOfBloodOrBoneMarrow
+84757009,SNOMED,Epilepsy
+84760002,SNOMED,BipolarDiseaseOrSchizophrenia
+847631000000107,SNOMED,CancerOfBloodOrBoneMarrow
+847651000000100,SNOMED,CancerOfBloodOrBoneMarrow
+847691000000108,SNOMED,CancerOfBloodOrBoneMarrow
+847701000000108,SNOMED,CancerOfBloodOrBoneMarrow
+847741000000106,SNOMED,CancerOfBloodOrBoneMarrow
+84801008,SNOMED,RheumatoidArthritisOrSle
+851261000006100,SNOMED,Copd
+85232009,SNOMED,HeartFailure
+85248005,SNOMED,BipolarDiseaseOrSchizophrenia
+853581000006107,SNOMED,LearningDisabilityOrDownsSyndrome
+85407005,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+854381000006102,SNOMED,HivOrAids
+855281000006108,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+857391000006106,SNOMED,LearningDisabilityOrDownsSyndrome
+85761009,SNOMED,Asthma
+859041000000103,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+86044005,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+86092005,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+86252004,SNOMED,CongenitalHeartProblem
+86299006,SNOMED,CongenitalHeartProblem
+863741000000108,SNOMED,CancerOfBloodOrBoneMarrow
+863761000000109,SNOMED,CancerOfBloodOrBoneMarrow
+863781000000100,SNOMED,CancerOfBloodOrBoneMarrow
+86406008,SNOMED,HivOrAids
+864191000000104,SNOMED,ThrombosisOrPulmonaryEmbolus
+864211000000100,SNOMED,ThrombosisOrPulmonaryEmbolus
+86461000000107,SNOMED,Ethnicity
+86555001,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+86638007,SNOMED,CysticFibrosisBronchiectasisAlveolitis
+866881000000101,SNOMED,Asthma
+86765009,SNOMED,LearningDisabilityOrDownsSyndrome
+87163000,SNOMED,CancerOfBloodOrBoneMarrow
+87343002,SNOMED,CoronaryHeartDisease
+87433001,SNOMED,Copd
+8801005,SNOMED,Diabetes
+88032003,SNOMED,StrokeOrTia
+88223008,SNOMED,PulmonaryHypertensionOrFibrosis
+885831000000109,SNOMED,CerebralPalsy
+88714009,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+88805009,SNOMED,HeartFailure
+88911000000101,SNOMED,Ethnicity
+88921000000107,SNOMED,Ethnicity
+889211000000104,SNOMED,LearningDisabilityOrDownsSyndrome
+88923002,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+88931000000109,SNOMED,Ethnicity
+88941000000100,SNOMED,Ethnicity
+88951000000102,SNOMED,Ethnicity
+88961000000104,SNOMED,Ethnicity
+88971000000106,SNOMED,Ethnicity
+88981000000108,SNOMED,Ethnicity
+89001000000105,SNOMED,Ethnicity
+89011000000107,SNOMED,Ethnicity
+89021000000101,SNOMED,Ethnicity
+892401000000105,SNOMED,PulmonaryHypertensionOrFibrosis
+892421000000101,SNOMED,PulmonaryHypertensionOrFibrosis
+892441000000108,SNOMED,PulmonaryHypertensionOrFibrosis
+892461000000109,SNOMED,PulmonaryHypertensionOrFibrosis
+89525009,SNOMED,Epilepsy
+89549007,SNOMED,Copd
+89580002,SNOMED,LiverCirrhosis
+89820008,SNOMED,PriorFractureOfHipWristSpineHumerus
+89980009,SNOMED,ThrombosisOrPulmonaryEmbolus
+90099008,SNOMED,Dementia
+90383006,SNOMED,CongenitalHeartProblem
+904531000000100,SNOMED,CerebralPalsy
+905451000006102,SNOMED,PulmonaryHypertensionOrFibrosis
+905781000006102,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+906081000006105,SNOMED,LiverCirrhosis
+90610005,SNOMED,PulmonaryHypertensionOrFibrosis
+90688005,SNOMED,ChronicKidneyDisease5
+907241000006107,SNOMED,CerebralPalsy
+907411000006109,SNOMED,CerebralPalsy
+907581000006103,SNOMED,StrokeOrTia
+907591000006100,SNOMED,StrokeOrTia
+908801000006105,SNOMED,StrokeOrTia
+908811000006108,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+908941000006102,SNOMED,LearningDisabilityOrDownsSyndrome
+909471000006105,SNOMED,ThrombosisOrPulmonaryEmbolus
+909731000006101,SNOMED,PulmonaryHypertensionOrFibrosis
+909931000006104,SNOMED,LearningDisabilityOrDownsSyndrome
+909941000006109,SNOMED,LearningDisabilityOrDownsSyndrome
+909951000006106,SNOMED,LearningDisabilityOrDownsSyndrome
+909961000006108,SNOMED,LearningDisabilityOrDownsSyndrome
+91138005,SNOMED,LearningDisabilityOrDownsSyndrome
+91335003,SNOMED,CoronaryHeartDisease
+91388009,SNOMED,LearningDisabilityOrDownsSyndrome
+914921000006101,SNOMED,Dementia
+914931000006103,SNOMED,Dementia
+914941000006108,SNOMED,Dementia
+914951000006105,SNOMED,Dementia
+91634006,SNOMED,CongenitalHeartProblem
+91637004,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+91855006,SNOMED,CancerOfBloodOrBoneMarrow
+91857003,SNOMED,CancerOfBloodOrBoneMarrow
+91861009,SNOMED,CancerOfBloodOrBoneMarrow
+91947003,SNOMED,HivOrAids
+92391000000108,SNOMED,Ethnicity
+92401000000106,SNOMED,Ethnicity
+92411000000108,SNOMED,Ethnicity
+92421000000102,SNOMED,Ethnicity
+92431000000100,SNOMED,Ethnicity
+92441000000109,SNOMED,Ethnicity
+92451000000107,SNOMED,Ethnicity
+92461000000105,SNOMED,Ethnicity
+92471000000103,SNOMED,Ethnicity
+92481000000101,SNOMED,Ethnicity
+92491000000104,SNOMED,Ethnicity
+92501000000105,SNOMED,Ethnicity
+92506005,SNOMED,HeartFailure
+92511000000107,SNOMED,Ethnicity
+92521000000101,SNOMED,Ethnicity
+92541000000108,SNOMED,Ethnicity
+925451000006109,SNOMED,HivOrAids
+92551000000106,SNOMED,Ethnicity
+92561000000109,SNOMED,Ethnicity
+92571000000102,SNOMED,Ethnicity
+925771000006106,SNOMED,HivOrAids
+92581000000100,SNOMED,Ethnicity
+92591000000103,SNOMED,Ethnicity
+92601000000109,SNOMED,Ethnicity
+92611000000106,SNOMED,Ethnicity
+92621000000100,SNOMED,Ethnicity
+92631000000103,SNOMED,Ethnicity
+92641000000107,SNOMED,Ethnicity
+92651000000105,SNOMED,Ethnicity
+92661000000108,SNOMED,Ethnicity
+92671000000101,SNOMED,Ethnicity
+92681000000104,SNOMED,Ethnicity
+92691000000102,SNOMED,Ethnicity
+92701000000102,SNOMED,Ethnicity
+92711000000100,SNOMED,Ethnicity
+92721000000106,SNOMED,Ethnicity
+92731000000108,SNOMED,Ethnicity
+92741000000104,SNOMED,Ethnicity
+92751000000101,SNOMED,Ethnicity
+92761000000103,SNOMED,Ethnicity
+92771000000105,SNOMED,Ethnicity
+92781000000107,SNOMED,Ethnicity
+92791000000109,SNOMED,Ethnicity
+92812005,SNOMED,CancerOfBloodOrBoneMarrow
+92814006,SNOMED,CancerOfBloodOrBoneMarrow
+92818009,SNOMED,CancerOfBloodOrBoneMarrow
+929111000000105,SNOMED,HousingCategory
+93133006,SNOMED,CancerOfBloodOrBoneMarrow
+93134000,SNOMED,CancerOfBloodOrBoneMarrow
+93135004,SNOMED,CancerOfBloodOrBoneMarrow
+93136003,SNOMED,CancerOfBloodOrBoneMarrow
+93137007,SNOMED,CancerOfBloodOrBoneMarrow
+93138002,SNOMED,CancerOfBloodOrBoneMarrow
+93139005,SNOMED,CancerOfBloodOrBoneMarrow
+93140007,SNOMED,CancerOfBloodOrBoneMarrow
+93143009,SNOMED,CancerOfBloodOrBoneMarrow
+93144003,SNOMED,CancerOfBloodOrBoneMarrow
+93145002,SNOMED,CancerOfBloodOrBoneMarrow
+93146001,SNOMED,CancerOfBloodOrBoneMarrow
+93150008,SNOMED,CancerOfBloodOrBoneMarrow
+93151007,SNOMED,CancerOfBloodOrBoneMarrow
+93182006,SNOMED,CancerOfBloodOrBoneMarrow
+93183001,SNOMED,CancerOfBloodOrBoneMarrow
+93184007,SNOMED,CancerOfBloodOrBoneMarrow
+93188005,SNOMED,CancerOfBloodOrBoneMarrow
+93189002,SNOMED,CancerOfBloodOrBoneMarrow
+93191005,SNOMED,CancerOfBloodOrBoneMarrow
+93192003,SNOMED,CancerOfBloodOrBoneMarrow
+93193008,SNOMED,CancerOfBloodOrBoneMarrow
+93194002,SNOMED,CancerOfBloodOrBoneMarrow
+93195001,SNOMED,CancerOfBloodOrBoneMarrow
+93196000,SNOMED,CancerOfBloodOrBoneMarrow
+93197009,SNOMED,CancerOfBloodOrBoneMarrow
+93198004,SNOMED,CancerOfBloodOrBoneMarrow
+93384001,SNOMED,CongenitalHeartProblem
+93451002,SNOMED,CancerOfBloodOrBoneMarrow
+93493001,SNOMED,CancerOfBloodOrBoneMarrow
+93494007,SNOMED,CancerOfBloodOrBoneMarrow
+93495008,SNOMED,CancerOfBloodOrBoneMarrow
+93500006,SNOMED,CancerOfBloodOrBoneMarrow
+93509007,SNOMED,CancerOfBloodOrBoneMarrow
+93518009,SNOMED,CancerOfBloodOrBoneMarrow
+93520007,SNOMED,CancerOfBloodOrBoneMarrow
+93521006,SNOMED,CancerOfBloodOrBoneMarrow
+93522004,SNOMED,CancerOfBloodOrBoneMarrow
+93523009,SNOMED,CancerOfBloodOrBoneMarrow
+93524003,SNOMED,CancerOfBloodOrBoneMarrow
+93525002,SNOMED,CancerOfBloodOrBoneMarrow
+93526001,SNOMED,CancerOfBloodOrBoneMarrow
+93527005,SNOMED,CancerOfBloodOrBoneMarrow
+93530003,SNOMED,CancerOfBloodOrBoneMarrow
+93531004,SNOMED,CancerOfBloodOrBoneMarrow
+93536009,SNOMED,CancerOfBloodOrBoneMarrow
+93541001,SNOMED,CancerOfBloodOrBoneMarrow
+93542008,SNOMED,CancerOfBloodOrBoneMarrow
+93543003,SNOMED,CancerOfBloodOrBoneMarrow
+93545005,SNOMED,CancerOfBloodOrBoneMarrow
+93547002,SNOMED,CancerOfBloodOrBoneMarrow
+93548007,SNOMED,CancerOfBloodOrBoneMarrow
+93549004,SNOMED,CancerOfBloodOrBoneMarrow
+93554008,SNOMED,CancerOfBloodOrBoneMarrow
+93827000,SNOMED,LungOrOralCancer
+93880001,SNOMED,LungOrOralCancer
+93921000000101,SNOMED,Ethnicity
+93931000000104,SNOMED,Ethnicity
+93941000000108,SNOMED,Ethnicity
+939491000006102,SNOMED,Dementia
+93951000000106,SNOMED,Ethnicity
+93961000000109,SNOMED,Ethnicity
+93981000000100,SNOMED,Ethnicity
+93991000000103,SNOMED,Ethnicity
+94001000000108,SNOMED,Ethnicity
+94011000000105,SNOMED,Ethnicity
+94021000000104,SNOMED,Ethnicity
+94031000000102,SNOMED,Ethnicity
+94041000000106,SNOMED,Ethnicity
+94051000000109,SNOMED,Ethnicity
+940531000006106,SNOMED,SickleCellViaBool
+94061000000107,SNOMED,Ethnicity
+94071000000100,SNOMED,Ethnicity
+94081000000103,SNOMED,Ethnicity
+94091000000101,SNOMED,Ethnicity
+94101000000109,SNOMED,Ethnicity
+94111000000106,SNOMED,Ethnicity
+94121000000100,SNOMED,Ethnicity
+94134006,SNOMED,LungOrOralCancer
+94151000000105,SNOMED,Ethnicity
+943041000000105,SNOMED,HivOrAids
+9468002,SNOMED,PriorFractureOfHipWristSpineHumerus
+94707004,SNOMED,CancerOfBloodOrBoneMarrow
+94708009,SNOMED,CancerOfBloodOrBoneMarrow
+94709001,SNOMED,CancerOfBloodOrBoneMarrow
+94710006,SNOMED,CancerOfBloodOrBoneMarrow
+94711005,SNOMED,CancerOfBloodOrBoneMarrow
+94712003,SNOMED,CancerOfBloodOrBoneMarrow
+94714002,SNOMED,CancerOfBloodOrBoneMarrow
+94719007,SNOMED,CancerOfBloodOrBoneMarrow
+950231000000104,SNOMED,ChronicKidneyDisease4
+950251000000106,SNOMED,ChronicKidneyDisease5
+950291000000103,SNOMED,ChronicKidneyDisease5
+950311000000102,SNOMED,ChronicKidneyDisease5
+95186006,SNOMED,CancerOfBloodOrBoneMarrow
+95187002,SNOMED,CancerOfBloodOrBoneMarrow
+95188007,SNOMED,CancerOfBloodOrBoneMarrow
+95192000,SNOMED,CancerOfBloodOrBoneMarrow
+95193005,SNOMED,CancerOfBloodOrBoneMarrow
+95208000,SNOMED,Epilepsy
+95210003,SNOMED,CancerOfBloodOrBoneMarrow
+95263006,SNOMED,CancerOfBloodOrBoneMarrow
+95441000,SNOMED,CongenitalHeartProblem
+95457000,SNOMED,StrokeOrTia
+95460007,SNOMED,StrokeOrTia
+955631000006100,SNOMED,Asthma
+95892003,SNOMED,HivOrAids
+959371000006105,SNOMED,HousingCategory
+9631008,SNOMED,RheumatoidArthritisOrSle
+983291000006106,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+983301000006107,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+983311000006105,SNOMED,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+984661000000105,SNOMED,LearningDisabilityOrDownsSyndrome
+984671000000103,SNOMED,LearningDisabilityOrDownsSyndrome
+984681000000101,SNOMED,LearningDisabilityOrDownsSyndrome
+9893005,SNOMED,SevereCombinedImmunodeficiencySyndromeViaBool
+994431000006105,SNOMED,ChronicKidneyDisease3
+999791000000106,SNOMED,Diabetes
+1295,Read2,CerebralPalsy
+13D-1,Read2,HousingCategory
+13D1,Read2,HousingCategory
+13D2,Read2,HousingCategory
+13F5,Read2,HousingCategory
+13F5-1,Read2,HousingCategory
+13F51,Read2,HousingCategory
+13F51-1,Read2,HousingCategory
+13F52,Read2,HousingCategory
+13F6,Read2,HousingCategory
+13F61,Read2,HousingCategory
+13F7,Read2,HousingCategory
+13F72,Read2,HousingCategory
+13FD,Read2,HousingCategory
+13FK,Read2,HousingCategory
+13FT,Read2,HousingCategory
+13FX,Read2,HousingCategory
+13IE,Read2,LearningDisabilityOrDownsSyndrome
+13Z1,Read2,LearningDisabilityOrDownsSyndrome
+13Z2,Read2,LearningDisabilityOrDownsSyndrome
+13Z3,Read2,LearningDisabilityOrDownsSyndrome
+13Z4E,Read2,LearningDisabilityOrDownsSyndrome
+13Z5,Read2,LearningDisabilityOrDownsSyndrome
+13ZK,Read2,LearningDisabilityOrDownsSyndrome
+1458,Read2,SickleCellViaBool
+1461,Read2,Dementia
+146D,Read2,BipolarDiseaseOrSchizophrenia
+14C4-1,Read2,InflammatoryBowelDisease
+173A,Read2,Asthma
+173C,Read2,Asthma
+173D,Read2,Asthma
+1780,Read2,Asthma
+1O2,Read2,Asthma
+1Z12,Read2,ChronicKidneyDisease
+1Z13,Read2,ChronicKidneyDisease
+1Z14,Read2,ChronicKidneyDisease
+1Z15,Read2,ChronicKidneyDisease
+1Z16,Read2,ChronicKidneyDisease
+1Z1B,Read2,ChronicKidneyDisease
+1Z1B-1,Read2,ChronicKidneyDisease
+1Z1C,Read2,ChronicKidneyDisease
+1Z1C-1,Read2,ChronicKidneyDisease
+1Z1D,Read2,ChronicKidneyDisease
+1Z1D-1,Read2,ChronicKidneyDisease
+1Z1E,Read2,ChronicKidneyDisease
+1Z1E-1,Read2,ChronicKidneyDisease
+1Z1F,Read2,ChronicKidneyDisease
+1Z1F-1,Read2,ChronicKidneyDisease
+1Z1G,Read2,ChronicKidneyDisease
+1Z1G-1,Read2,ChronicKidneyDisease
+1Z1H,Read2,ChronicKidneyDisease
+1Z1H-1,Read2,ChronicKidneyDisease
+1Z1J,Read2,ChronicKidneyDisease
+1Z1J-1,Read2,ChronicKidneyDisease
+1Z1K,Read2,ChronicKidneyDisease
+1Z1K-1,Read2,ChronicKidneyDisease
+1Z1L,Read2,ChronicKidneyDisease
+1Z1L-1,Read2,ChronicKidneyDisease
+38GW,Read2,CerebralPalsy
+3A,Read2,LearningDisabilityOrDownsSyndrome
+42W5,Read2,Diabetes
+43C3,Read2,HivOrAids
+43C3-1,Read2,HivOrAids
+65QA,Read2,HivOrAids
+65VE,Read2,HivOrAids
+662F,Read2,HeartFailure
+662G,Read2,HeartFailure
+662H,Read2,HeartFailure
+662I,Read2,HeartFailure
+663J,Read2,Asthma
+663V0,Read2,Asthma
+663V3,Read2,Asthma
+6894,Read2,LearningDisabilityOrDownsSyndrome
+6AB,Read2,Dementia
+79230,Read2,CongenitalHeartProblem
+79231,Read2,CongenitalHeartProblem
+79232,Read2,CongenitalHeartProblem
+79233,Read2,CongenitalHeartProblem
+7K1L4,Read2,PriorFractureOfHipWristSpineHumerus
+7K1L5,Read2,PriorFractureOfHipWristSpineHumerus
+7Q010,Read2,PulmonaryHypertensionOrFibrosis
+7Q011,Read2,PulmonaryHypertensionOrFibrosis
+7Q012,Read2,PulmonaryHypertensionOrFibrosis
+7Q013,Read2,PulmonaryHypertensionOrFibrosis
+7Q014,Read2,PulmonaryHypertensionOrFibrosis
+7Q015,Read2,PulmonaryHypertensionOrFibrosis
+7Q016,Read2,PulmonaryHypertensionOrFibrosis
+7Q017,Read2,PulmonaryHypertensionOrFibrosis
+8O07,Read2,LearningDisabilityOrDownsSyndrome
+8O24,Read2,HousingCategory
+8O5,Read2,LearningDisabilityOrDownsSyndrome
+918E,Read2,LearningDisabilityOrDownsSyndrome
+9B0Y,Read2,HousingCategory
+9B1P,Read2,HousingCategory
+9F8,Read2,LearningDisabilityOrDownsSyndrome
+9I0,Read2,Ethnicity
+9I00,Read2,Ethnicity
+9I1,Read2,Ethnicity
+9I10,Read2,Ethnicity
+9I2,Read2,Ethnicity
+9I20,Read2,Ethnicity
+9I21,Read2,Ethnicity
+9I22,Read2,Ethnicity
+9I23,Read2,Ethnicity
+9I24,Read2,Ethnicity
+9I25,Read2,Ethnicity
+9I26,Read2,Ethnicity
+9I27,Read2,Ethnicity
+9I28,Read2,Ethnicity
+9I29,Read2,Ethnicity
+9I2A,Read2,Ethnicity
+9I2B,Read2,Ethnicity
+9I2C,Read2,Ethnicity
+9I2D,Read2,Ethnicity
+9I2E,Read2,Ethnicity
+9I2F,Read2,Ethnicity
+9I2G,Read2,Ethnicity
+9I2H,Read2,Ethnicity
+9I2J,Read2,Ethnicity
+9I2K,Read2,Ethnicity
+9I2L,Read2,Ethnicity
+9I2M,Read2,Ethnicity
+9I2N,Read2,Ethnicity
+9I2P,Read2,Ethnicity
+9I2Q,Read2,Ethnicity
+9I2R,Read2,Ethnicity
+9I2S,Read2,Ethnicity
+9I2T,Read2,Ethnicity
+9I3,Read2,Ethnicity
+9I4,Read2,Ethnicity
+9I5,Read2,Ethnicity
+9I6,Read2,Ethnicity
+9I60,Read2,Ethnicity
+9I61,Read2,Ethnicity
+9I62,Read2,Ethnicity
+9I63,Read2,Ethnicity
+9I64,Read2,Ethnicity
+9I65,Read2,Ethnicity
+9I7,Read2,Ethnicity
+9I8,Read2,Ethnicity
+9I9,Read2,Ethnicity
+9IA,Read2,Ethnicity
+9IA1,Read2,Ethnicity
+9IA2,Read2,Ethnicity
+9IA3,Read2,Ethnicity
+9IA4,Read2,Ethnicity
+9IA5,Read2,Ethnicity
+9IA6,Read2,Ethnicity
+9IA7,Read2,Ethnicity
+9IA8,Read2,Ethnicity
+9IA9,Read2,Ethnicity
+9IAA,Read2,Ethnicity
+9IB,Read2,Ethnicity
+9IC,Read2,Ethnicity
+9ID,Read2,Ethnicity
+9ID0,Read2,Ethnicity
+9ID1,Read2,Ethnicity
+9ID2,Read2,Ethnicity
+9ID3,Read2,Ethnicity
+9ID4,Read2,Ethnicity
+9IE,Read2,Ethnicity
+9IF,Read2,Ethnicity
+9IF0,Read2,Ethnicity
+9IF1,Read2,Ethnicity
+9IF2,Read2,Ethnicity
+9IF3,Read2,Ethnicity
+9IF9,Read2,Ethnicity
+9IFA,Read2,Ethnicity
+9IFB,Read2,Ethnicity
+9IFC,Read2,Ethnicity
+9IFD,Read2,Ethnicity
+9IFE,Read2,Ethnicity
+9IFF,Read2,Ethnicity
+9IFG,Read2,Ethnicity
+9IFH,Read2,Ethnicity
+9IFJ,Read2,Ethnicity
+9IFK,Read2,Ethnicity
+9K6,Read2,HousingCategory
+9K60,Read2,HousingCategory
+9KL-1,Read2,HivOrAids
+9N1G,Read2,HousingCategory
+9NGR,Read2,HousingCategory
+9S1,Read2,Ethnicity
+9S10,Read2,Ethnicity
+9S11,Read2,Ethnicity
+9S12,Read2,Ethnicity
+9S13,Read2,Ethnicity
+9S14,Read2,Ethnicity
+9S2,Read2,Ethnicity
+9S3,Read2,Ethnicity
+9S4,Read2,Ethnicity
+9S41,Read2,Ethnicity
+9S42,Read2,Ethnicity
+9S42-1,Read2,Ethnicity
+9S42-2,Read2,Ethnicity
+9S42-3,Read2,Ethnicity
+9S43,Read2,Ethnicity
+9S43-1,Read2,Ethnicity
+9S43-2,Read2,Ethnicity
+9S43-3,Read2,Ethnicity
+9S44,Read2,Ethnicity
+9S45,Read2,Ethnicity
+9S45-1,Read2,Ethnicity
+9S45-2,Read2,Ethnicity
+9S46,Read2,Ethnicity
+9S47,Read2,Ethnicity
+9S48,Read2,Ethnicity
+9S5,Read2,Ethnicity
+9S51,Read2,Ethnicity
+9S52,Read2,Ethnicity
+9S6,Read2,Ethnicity
+9S7,Read2,Ethnicity
+9S8,Read2,Ethnicity
+9S9,Read2,Ethnicity
+9SA,Read2,Ethnicity
+9SA1,Read2,Ethnicity
+9SA2,Read2,Ethnicity
+9SA3,Read2,Ethnicity
+9SA3-1,Read2,Ethnicity
+9SA3-2,Read2,Ethnicity
+9SA3-3,Read2,Ethnicity
+9SA4,Read2,Ethnicity
+9SA4-1,Read2,Ethnicity
+9SA4-2,Read2,Ethnicity
+9SA5,Read2,Ethnicity
+9SA6,Read2,Ethnicity
+9SA6-1,Read2,Ethnicity
+9SA6-2,Read2,Ethnicity
+9SA7,Read2,Ethnicity
+9SA8,Read2,Ethnicity
+9SA9,Read2,Ethnicity
+9SAA,Read2,Ethnicity
+9SAA-1,Read2,Ethnicity
+9SAA-2,Read2,Ethnicity
+9SAB,Read2,Ethnicity
+9SAB-1,Read2,Ethnicity
+9SAB-2,Read2,Ethnicity
+9SAC,Read2,Ethnicity
+9SAD,Read2,Ethnicity
+9SB,Read2,Ethnicity
+9SB1,Read2,Ethnicity
+9SB2,Read2,Ethnicity
+9SB3,Read2,Ethnicity
+9SB4,Read2,Ethnicity
+9SB5,Read2,Ethnicity
+9SB6,Read2,Ethnicity
+9SC,Read2,Ethnicity
+9SG,Read2,Ethnicity
+9SH,Read2,Ethnicity
+9SI,Read2,Ethnicity
+9SJ,Read2,Ethnicity
+A788,Read2,HivOrAids
+A788-1,Read2,HivOrAids
+A7880,Read2,HivOrAids
+A7881,Read2,HivOrAids
+A7882,Read2,HivOrAids
+A7883,Read2,HivOrAids
+A7884,Read2,HivOrAids
+A7885,Read2,HivOrAids
+A7886,Read2,HivOrAids
+A788U,Read2,HivOrAids
+A788V,Read2,HivOrAids
+A788W,Read2,HivOrAids
+A788X,Read2,HivOrAids
+A788Y,Read2,HivOrAids
+A788Z,Read2,HivOrAids
+A789,Read2,HivOrAids
+A7890,Read2,HivOrAids
+A7891,Read2,HivOrAids
+A7892,Read2,HivOrAids
+A7893,Read2,HivOrAids
+A7893-1,Read2,HivOrAids
+A7894,Read2,HivOrAids
+A7895,Read2,HivOrAids
+A7895-1,Read2,HivOrAids
+A7896,Read2,HivOrAids
+A7896-1,Read2,HivOrAids
+A7897,Read2,HivOrAids
+A7897-1,Read2,HivOrAids
+A7898,Read2,HivOrAids
+A7899,Read2,HivOrAids
+A789A,Read2,HivOrAids
+A789X,Read2,HivOrAids
+AYUC,Read2,HivOrAids
+AYUC0,Read2,HivOrAids
+AYUC1,Read2,HivOrAids
+AYUC2,Read2,HivOrAids
+AYUC3,Read2,HivOrAids
+AYUC4,Read2,HivOrAids
+AYUC5,Read2,HivOrAids
+AYUC6,Read2,HivOrAids
+AYUC6-1,Read2,HivOrAids
+AYUC7,Read2,HivOrAids
+AYUC8,Read2,HivOrAids
+AYUC9,Read2,HivOrAids
+AYUCA,Read2,HivOrAids
+AYUCB,Read2,HivOrAids
+AYUCC,Read2,HivOrAids
+AYUCD,Read2,HivOrAids
+B0,Read2,LungOrOralCancer
+B0-1,Read2,LungOrOralCancer
+B00,Read2,LungOrOralCancer
+B00-1,Read2,LungOrOralCancer
+B00-99,Read2,LungOrOralCancer
+B000,Read2,LungOrOralCancer
+B0000,Read2,LungOrOralCancer
+B0001,Read2,LungOrOralCancer
+B000Z,Read2,LungOrOralCancer
+B001,Read2,LungOrOralCancer
+B0010,Read2,LungOrOralCancer
+B0011,Read2,LungOrOralCancer
+B001Z,Read2,LungOrOralCancer
+B002,Read2,LungOrOralCancer
+B0020,Read2,LungOrOralCancer
+B0021,Read2,LungOrOralCancer
+B0022,Read2,LungOrOralCancer
+B0023,Read2,LungOrOralCancer
+B002Z,Read2,LungOrOralCancer
+B003,Read2,LungOrOralCancer
+B0030,Read2,LungOrOralCancer
+B0031,Read2,LungOrOralCancer
+B0032,Read2,LungOrOralCancer
+B0033,Read2,LungOrOralCancer
+B003Z,Read2,LungOrOralCancer
+B004,Read2,LungOrOralCancer
+B0040,Read2,LungOrOralCancer
+B0041,Read2,LungOrOralCancer
+B0042,Read2,LungOrOralCancer
+B0043,Read2,LungOrOralCancer
+B004Z,Read2,LungOrOralCancer
+B005,Read2,LungOrOralCancer
+B006,Read2,LungOrOralCancer
+B007,Read2,LungOrOralCancer
+B00Y,Read2,LungOrOralCancer
+B00Z,Read2,LungOrOralCancer
+B00Z0,Read2,LungOrOralCancer
+B00Z1,Read2,LungOrOralCancer
+B00ZZ,Read2,LungOrOralCancer
+B01,Read2,LungOrOralCancer
+B01-99,Read2,LungOrOralCancer
+B010,Read2,LungOrOralCancer
+B010-1,Read2,LungOrOralCancer
+B0100,Read2,LungOrOralCancer
+B010Z,Read2,LungOrOralCancer
+B011,Read2,LungOrOralCancer
+B0110,Read2,LungOrOralCancer
+B0111,Read2,LungOrOralCancer
+B011Z,Read2,LungOrOralCancer
+B012,Read2,LungOrOralCancer
+B013,Read2,LungOrOralCancer
+B0130,Read2,LungOrOralCancer
+B0131,Read2,LungOrOralCancer
+B013Z,Read2,LungOrOralCancer
+B014,Read2,LungOrOralCancer
+B015,Read2,LungOrOralCancer
+B016,Read2,LungOrOralCancer
+B017,Read2,LungOrOralCancer
+B01Y,Read2,LungOrOralCancer
+B01Z,Read2,LungOrOralCancer
+B02,Read2,LungOrOralCancer
+B02-99,Read2,LungOrOralCancer
+B020,Read2,LungOrOralCancer
+B021,Read2,LungOrOralCancer
+B022,Read2,LungOrOralCancer
+B023,Read2,LungOrOralCancer
+B02Y,Read2,LungOrOralCancer
+B02Z,Read2,LungOrOralCancer
+B03,Read2,LungOrOralCancer
+B03-99,Read2,LungOrOralCancer
+B030,Read2,LungOrOralCancer
+B031,Read2,LungOrOralCancer
+B03Y,Read2,LungOrOralCancer
+B03Z,Read2,LungOrOralCancer
+B04,Read2,LungOrOralCancer
+B040,Read2,LungOrOralCancer
+B041,Read2,LungOrOralCancer
+B042,Read2,LungOrOralCancer
+B04Y,Read2,LungOrOralCancer
+B04Z,Read2,LungOrOralCancer
+B05,Read2,LungOrOralCancer
+B050,Read2,LungOrOralCancer
+B050-1,Read2,LungOrOralCancer
+B051,Read2,LungOrOralCancer
+B0510,Read2,LungOrOralCancer
+B0511,Read2,LungOrOralCancer
+B0512,Read2,LungOrOralCancer
+B0513,Read2,LungOrOralCancer
+B051Z,Read2,LungOrOralCancer
+B052,Read2,LungOrOralCancer
+B053,Read2,LungOrOralCancer
+B054,Read2,LungOrOralCancer
+B055,Read2,LungOrOralCancer
+B0550,Read2,LungOrOralCancer
+B0551,Read2,LungOrOralCancer
+B055Z,Read2,LungOrOralCancer
+B056,Read2,LungOrOralCancer
+B057,Read2,LungOrOralCancer
+B05Y,Read2,LungOrOralCancer
+B05Z,Read2,LungOrOralCancer
+B05Z0,Read2,LungOrOralCancer
+B06,Read2,LungOrOralCancer
+B06-99,Read2,LungOrOralCancer
+B060,Read2,LungOrOralCancer
+B0600,Read2,LungOrOralCancer
+B0601,Read2,LungOrOralCancer
+B0602,Read2,LungOrOralCancer
+B060Z,Read2,LungOrOralCancer
+B061,Read2,LungOrOralCancer
+B062,Read2,LungOrOralCancer
+B0620,Read2,LungOrOralCancer
+B0621,Read2,LungOrOralCancer
+B0622,Read2,LungOrOralCancer
+B0623,Read2,LungOrOralCancer
+B062Z,Read2,LungOrOralCancer
+B063,Read2,LungOrOralCancer
+B064,Read2,LungOrOralCancer
+B0640,Read2,LungOrOralCancer
+B0641,Read2,LungOrOralCancer
+B064Z,Read2,LungOrOralCancer
+B065,Read2,LungOrOralCancer
+B066,Read2,LungOrOralCancer
+B067,Read2,LungOrOralCancer
+B06Y,Read2,LungOrOralCancer
+B06Y0,Read2,LungOrOralCancer
+B06YZ,Read2,LungOrOralCancer
+B06Z,Read2,LungOrOralCancer
+B07,Read2,LungOrOralCancer
+B070,Read2,LungOrOralCancer
+B071,Read2,LungOrOralCancer
+B0710,Read2,LungOrOralCancer
+B0711,Read2,LungOrOralCancer
+B071Z,Read2,LungOrOralCancer
+B072,Read2,LungOrOralCancer
+B0720,Read2,LungOrOralCancer
+B0721,Read2,LungOrOralCancer
+B072Z,Read2,LungOrOralCancer
+B073,Read2,LungOrOralCancer
+B0730,Read2,LungOrOralCancer
+B0731,Read2,LungOrOralCancer
+B0732,Read2,LungOrOralCancer
+B073Z,Read2,LungOrOralCancer
+B074,Read2,LungOrOralCancer
+B07Y,Read2,LungOrOralCancer
+B07Z,Read2,LungOrOralCancer
+B08,Read2,LungOrOralCancer
+B080,Read2,LungOrOralCancer
+B081,Read2,LungOrOralCancer
+B082,Read2,LungOrOralCancer
+B083,Read2,LungOrOralCancer
+B084,Read2,LungOrOralCancer
+B08Y,Read2,LungOrOralCancer
+B08Z,Read2,LungOrOralCancer
+B0Z,Read2,LungOrOralCancer
+B0Z0,Read2,LungOrOralCancer
+B0Z1,Read2,LungOrOralCancer
+B0Z2,Read2,LungOrOralCancer
+B0ZY,Read2,LungOrOralCancer
+B0ZZ,Read2,LungOrOralCancer
+B0ZZ-99,Read2,LungOrOralCancer
+B22,Read2,LungOrOralCancer
+B22-98,Read2,LungOrOralCancer
+B22-99,Read2,LungOrOralCancer
+B220,Read2,LungOrOralCancer
+B2200,Read2,LungOrOralCancer
+B2201,Read2,LungOrOralCancer
+B220Z,Read2,LungOrOralCancer
+B221,Read2,LungOrOralCancer
+B2210,Read2,LungOrOralCancer
+B2211,Read2,LungOrOralCancer
+B221Z,Read2,LungOrOralCancer
+B222,Read2,LungOrOralCancer
+B222-1,Read2,LungOrOralCancer
+B222-99,Read2,LungOrOralCancer
+B2220,Read2,LungOrOralCancer
+B2221,Read2,LungOrOralCancer
+B222Z,Read2,LungOrOralCancer
+B223,Read2,LungOrOralCancer
+B223-99,Read2,LungOrOralCancer
+B2230,Read2,LungOrOralCancer
+B2231,Read2,LungOrOralCancer
+B223Z,Read2,LungOrOralCancer
+B224,Read2,LungOrOralCancer
+B224-99,Read2,LungOrOralCancer
+B2240,Read2,LungOrOralCancer
+B2241,Read2,LungOrOralCancer
+B224Z,Read2,LungOrOralCancer
+B225,Read2,LungOrOralCancer
+B226,Read2,LungOrOralCancer
+B22Y,Read2,LungOrOralCancer
+B22Z,Read2,LungOrOralCancer
+B22Z-1,Read2,LungOrOralCancer
+B6-1,Read2,CancerOfBloodOrBoneMarrow
+B6-99,Read2,CancerOfBloodOrBoneMarrow
+B602,Read2,CancerOfBloodOrBoneMarrow
+B602-99,Read2,CancerOfBloodOrBoneMarrow
+B6020,Read2,CancerOfBloodOrBoneMarrow
+B6021,Read2,CancerOfBloodOrBoneMarrow
+B6022,Read2,CancerOfBloodOrBoneMarrow
+B6023,Read2,CancerOfBloodOrBoneMarrow
+B6024,Read2,CancerOfBloodOrBoneMarrow
+B6025,Read2,CancerOfBloodOrBoneMarrow
+B6026,Read2,CancerOfBloodOrBoneMarrow
+B6027,Read2,CancerOfBloodOrBoneMarrow
+B6028,Read2,CancerOfBloodOrBoneMarrow
+B602Z,Read2,CancerOfBloodOrBoneMarrow
+B60Y,Read2,CancerOfBloodOrBoneMarrow
+B60Z,Read2,CancerOfBloodOrBoneMarrow
+B61,Read2,CancerOfBloodOrBoneMarrow
+B61-1,Read2,CancerOfBloodOrBoneMarrow
+B610,Read2,CancerOfBloodOrBoneMarrow
+B6100,Read2,CancerOfBloodOrBoneMarrow
+B6101,Read2,CancerOfBloodOrBoneMarrow
+B6102,Read2,CancerOfBloodOrBoneMarrow
+B6103,Read2,CancerOfBloodOrBoneMarrow
+B6104,Read2,CancerOfBloodOrBoneMarrow
+B6105,Read2,CancerOfBloodOrBoneMarrow
+B6106,Read2,CancerOfBloodOrBoneMarrow
+B6107,Read2,CancerOfBloodOrBoneMarrow
+B6108,Read2,CancerOfBloodOrBoneMarrow
+B610Z,Read2,CancerOfBloodOrBoneMarrow
+B611,Read2,CancerOfBloodOrBoneMarrow
+B6110,Read2,CancerOfBloodOrBoneMarrow
+B6111,Read2,CancerOfBloodOrBoneMarrow
+B6112,Read2,CancerOfBloodOrBoneMarrow
+B6113,Read2,CancerOfBloodOrBoneMarrow
+B6114,Read2,CancerOfBloodOrBoneMarrow
+B6115,Read2,CancerOfBloodOrBoneMarrow
+B6116,Read2,CancerOfBloodOrBoneMarrow
+B6117,Read2,CancerOfBloodOrBoneMarrow
+B6118,Read2,CancerOfBloodOrBoneMarrow
+B611Z,Read2,CancerOfBloodOrBoneMarrow
+B612,Read2,CancerOfBloodOrBoneMarrow
+B6120,Read2,CancerOfBloodOrBoneMarrow
+B6121,Read2,CancerOfBloodOrBoneMarrow
+B6122,Read2,CancerOfBloodOrBoneMarrow
+B6123,Read2,CancerOfBloodOrBoneMarrow
+B6124,Read2,CancerOfBloodOrBoneMarrow
+B6125,Read2,CancerOfBloodOrBoneMarrow
+B6126,Read2,CancerOfBloodOrBoneMarrow
+B6127,Read2,CancerOfBloodOrBoneMarrow
+B6128,Read2,CancerOfBloodOrBoneMarrow
+B612Z,Read2,CancerOfBloodOrBoneMarrow
+B613,Read2,CancerOfBloodOrBoneMarrow
+B613-1,Read2,CancerOfBloodOrBoneMarrow
+B6130,Read2,CancerOfBloodOrBoneMarrow
+B6131,Read2,CancerOfBloodOrBoneMarrow
+B6132,Read2,CancerOfBloodOrBoneMarrow
+B6133,Read2,CancerOfBloodOrBoneMarrow
+B6134,Read2,CancerOfBloodOrBoneMarrow
+B6135,Read2,CancerOfBloodOrBoneMarrow
+B6136,Read2,CancerOfBloodOrBoneMarrow
+B6137,Read2,CancerOfBloodOrBoneMarrow
+B6138,Read2,CancerOfBloodOrBoneMarrow
+B613Z,Read2,CancerOfBloodOrBoneMarrow
+B614,Read2,CancerOfBloodOrBoneMarrow
+B6140,Read2,CancerOfBloodOrBoneMarrow
+B6141,Read2,CancerOfBloodOrBoneMarrow
+B6142,Read2,CancerOfBloodOrBoneMarrow
+B6143,Read2,CancerOfBloodOrBoneMarrow
+B6144,Read2,CancerOfBloodOrBoneMarrow
+B6145,Read2,CancerOfBloodOrBoneMarrow
+B6146,Read2,CancerOfBloodOrBoneMarrow
+B6147,Read2,CancerOfBloodOrBoneMarrow
+B6148,Read2,CancerOfBloodOrBoneMarrow
+B614Z,Read2,CancerOfBloodOrBoneMarrow
+B615,Read2,CancerOfBloodOrBoneMarrow
+B6150,Read2,CancerOfBloodOrBoneMarrow
+B6151,Read2,CancerOfBloodOrBoneMarrow
+B6152,Read2,CancerOfBloodOrBoneMarrow
+B6153,Read2,CancerOfBloodOrBoneMarrow
+B6154,Read2,CancerOfBloodOrBoneMarrow
+B6155,Read2,CancerOfBloodOrBoneMarrow
+B6156,Read2,CancerOfBloodOrBoneMarrow
+B6157,Read2,CancerOfBloodOrBoneMarrow
+B6158,Read2,CancerOfBloodOrBoneMarrow
+B615Z,Read2,CancerOfBloodOrBoneMarrow
+B616,Read2,CancerOfBloodOrBoneMarrow
+B6160,Read2,CancerOfBloodOrBoneMarrow
+B6161,Read2,CancerOfBloodOrBoneMarrow
+B6162,Read2,CancerOfBloodOrBoneMarrow
+B6163,Read2,CancerOfBloodOrBoneMarrow
+B6164,Read2,CancerOfBloodOrBoneMarrow
+B6165,Read2,CancerOfBloodOrBoneMarrow
+B6166,Read2,CancerOfBloodOrBoneMarrow
+B6167,Read2,CancerOfBloodOrBoneMarrow
+B6168,Read2,CancerOfBloodOrBoneMarrow
+B616Z,Read2,CancerOfBloodOrBoneMarrow
+B617,Read2,CancerOfBloodOrBoneMarrow
+B618,Read2,CancerOfBloodOrBoneMarrow
+B619,Read2,CancerOfBloodOrBoneMarrow
+B61A,Read2,CancerOfBloodOrBoneMarrow
+B61B,Read2,CancerOfBloodOrBoneMarrow
+B61C,Read2,CancerOfBloodOrBoneMarrow
+B61Z,Read2,CancerOfBloodOrBoneMarrow
+B61Z-1,Read2,CancerOfBloodOrBoneMarrow
+B61Z0,Read2,CancerOfBloodOrBoneMarrow
+B61Z1,Read2,CancerOfBloodOrBoneMarrow
+B61Z2,Read2,CancerOfBloodOrBoneMarrow
+B61Z3,Read2,CancerOfBloodOrBoneMarrow
+B61Z4,Read2,CancerOfBloodOrBoneMarrow
+B61Z5,Read2,CancerOfBloodOrBoneMarrow
+B61Z6,Read2,CancerOfBloodOrBoneMarrow
+B61Z7,Read2,CancerOfBloodOrBoneMarrow
+B61Z8,Read2,CancerOfBloodOrBoneMarrow
+B61ZZ,Read2,CancerOfBloodOrBoneMarrow
+B62,Read2,CancerOfBloodOrBoneMarrow
+B62-98,Read2,CancerOfBloodOrBoneMarrow
+B62-99,Read2,CancerOfBloodOrBoneMarrow
+B620,Read2,CancerOfBloodOrBoneMarrow
+B620-1,Read2,CancerOfBloodOrBoneMarrow
+B6200,Read2,CancerOfBloodOrBoneMarrow
+B6201,Read2,CancerOfBloodOrBoneMarrow
+B6202,Read2,CancerOfBloodOrBoneMarrow
+B6203,Read2,CancerOfBloodOrBoneMarrow
+B6204,Read2,CancerOfBloodOrBoneMarrow
+B6205,Read2,CancerOfBloodOrBoneMarrow
+B6206,Read2,CancerOfBloodOrBoneMarrow
+B6207,Read2,CancerOfBloodOrBoneMarrow
+B6208,Read2,CancerOfBloodOrBoneMarrow
+B620Z,Read2,CancerOfBloodOrBoneMarrow
+B621,Read2,CancerOfBloodOrBoneMarrow
+B6210,Read2,CancerOfBloodOrBoneMarrow
+B6211,Read2,CancerOfBloodOrBoneMarrow
+B6212,Read2,CancerOfBloodOrBoneMarrow
+B6213,Read2,CancerOfBloodOrBoneMarrow
+B6214,Read2,CancerOfBloodOrBoneMarrow
+B6215,Read2,CancerOfBloodOrBoneMarrow
+B6216,Read2,CancerOfBloodOrBoneMarrow
+B6217,Read2,CancerOfBloodOrBoneMarrow
+B6218,Read2,CancerOfBloodOrBoneMarrow
+B621Z,Read2,CancerOfBloodOrBoneMarrow
+B622,Read2,CancerOfBloodOrBoneMarrow
+B622-1,Read2,CancerOfBloodOrBoneMarrow
+B6220,Read2,CancerOfBloodOrBoneMarrow
+B6221,Read2,CancerOfBloodOrBoneMarrow
+B6222,Read2,CancerOfBloodOrBoneMarrow
+B6223,Read2,CancerOfBloodOrBoneMarrow
+B6224,Read2,CancerOfBloodOrBoneMarrow
+B6225,Read2,CancerOfBloodOrBoneMarrow
+B6226,Read2,CancerOfBloodOrBoneMarrow
+B6227,Read2,CancerOfBloodOrBoneMarrow
+B6228,Read2,CancerOfBloodOrBoneMarrow
+B622Z,Read2,CancerOfBloodOrBoneMarrow
+B623,Read2,CancerOfBloodOrBoneMarrow
+B6230,Read2,CancerOfBloodOrBoneMarrow
+B6231,Read2,CancerOfBloodOrBoneMarrow
+B6232,Read2,CancerOfBloodOrBoneMarrow
+B6233,Read2,CancerOfBloodOrBoneMarrow
+B6234,Read2,CancerOfBloodOrBoneMarrow
+B6235,Read2,CancerOfBloodOrBoneMarrow
+B6236,Read2,CancerOfBloodOrBoneMarrow
+B6237,Read2,CancerOfBloodOrBoneMarrow
+B6238,Read2,CancerOfBloodOrBoneMarrow
+B623Z,Read2,CancerOfBloodOrBoneMarrow
+B624,Read2,CancerOfBloodOrBoneMarrow
+B624-1,Read2,CancerOfBloodOrBoneMarrow
+B624-2,Read2,CancerOfBloodOrBoneMarrow
+B6240,Read2,CancerOfBloodOrBoneMarrow
+B6241,Read2,CancerOfBloodOrBoneMarrow
+B6242,Read2,CancerOfBloodOrBoneMarrow
+B6243,Read2,CancerOfBloodOrBoneMarrow
+B6244,Read2,CancerOfBloodOrBoneMarrow
+B6245,Read2,CancerOfBloodOrBoneMarrow
+B6246,Read2,CancerOfBloodOrBoneMarrow
+B6247,Read2,CancerOfBloodOrBoneMarrow
+B6248,Read2,CancerOfBloodOrBoneMarrow
+B624Z,Read2,CancerOfBloodOrBoneMarrow
+B625,Read2,CancerOfBloodOrBoneMarrow
+B625-1,Read2,CancerOfBloodOrBoneMarrow
+B6250,Read2,CancerOfBloodOrBoneMarrow
+B6251,Read2,CancerOfBloodOrBoneMarrow
+B6252,Read2,CancerOfBloodOrBoneMarrow
+B6253,Read2,CancerOfBloodOrBoneMarrow
+B6254,Read2,CancerOfBloodOrBoneMarrow
+B6255,Read2,CancerOfBloodOrBoneMarrow
+B6256,Read2,CancerOfBloodOrBoneMarrow
+B6257,Read2,CancerOfBloodOrBoneMarrow
+B6258,Read2,CancerOfBloodOrBoneMarrow
+B625Z,Read2,CancerOfBloodOrBoneMarrow
+B626,Read2,CancerOfBloodOrBoneMarrow
+B6260,Read2,CancerOfBloodOrBoneMarrow
+B6261,Read2,CancerOfBloodOrBoneMarrow
+B6262,Read2,CancerOfBloodOrBoneMarrow
+B6263,Read2,CancerOfBloodOrBoneMarrow
+B6264,Read2,CancerOfBloodOrBoneMarrow
+B6265,Read2,CancerOfBloodOrBoneMarrow
+B6266,Read2,CancerOfBloodOrBoneMarrow
+B6267,Read2,CancerOfBloodOrBoneMarrow
+B6268,Read2,CancerOfBloodOrBoneMarrow
+B626Z,Read2,CancerOfBloodOrBoneMarrow
+B627,Read2,CancerOfBloodOrBoneMarrow
+B627-1,Read2,CancerOfBloodOrBoneMarrow
+B6270,Read2,CancerOfBloodOrBoneMarrow
+B6271,Read2,CancerOfBloodOrBoneMarrow
+B6272,Read2,CancerOfBloodOrBoneMarrow
+B6273,Read2,CancerOfBloodOrBoneMarrow
+B6274,Read2,CancerOfBloodOrBoneMarrow
+B6275,Read2,CancerOfBloodOrBoneMarrow
+B6276,Read2,CancerOfBloodOrBoneMarrow
+B6277,Read2,CancerOfBloodOrBoneMarrow
+B6278,Read2,CancerOfBloodOrBoneMarrow
+B6279,Read2,CancerOfBloodOrBoneMarrow
+B6279-1,Read2,CancerOfBloodOrBoneMarrow
+B627A,Read2,CancerOfBloodOrBoneMarrow
+B627B,Read2,CancerOfBloodOrBoneMarrow
+B627C,Read2,CancerOfBloodOrBoneMarrow
+B627C-1,Read2,CancerOfBloodOrBoneMarrow
+B627D,Read2,CancerOfBloodOrBoneMarrow
+B627E,Read2,CancerOfBloodOrBoneMarrow
+B627F,Read2,CancerOfBloodOrBoneMarrow
+B627G,Read2,CancerOfBloodOrBoneMarrow
+B627W,Read2,CancerOfBloodOrBoneMarrow
+B627X,Read2,CancerOfBloodOrBoneMarrow
+B628,Read2,CancerOfBloodOrBoneMarrow
+B6280,Read2,CancerOfBloodOrBoneMarrow
+B6281,Read2,CancerOfBloodOrBoneMarrow
+B6282,Read2,CancerOfBloodOrBoneMarrow
+B6283,Read2,CancerOfBloodOrBoneMarrow
+B6284,Read2,CancerOfBloodOrBoneMarrow
+B6285,Read2,CancerOfBloodOrBoneMarrow
+B6286,Read2,CancerOfBloodOrBoneMarrow
+B6287,Read2,CancerOfBloodOrBoneMarrow
+B629,Read2,CancerOfBloodOrBoneMarrow
+B62A,Read2,CancerOfBloodOrBoneMarrow
+B62B,Read2,CancerOfBloodOrBoneMarrow
+B62C,Read2,CancerOfBloodOrBoneMarrow
+B62D,Read2,CancerOfBloodOrBoneMarrow
+B62E,Read2,CancerOfBloodOrBoneMarrow
+B62E0,Read2,CancerOfBloodOrBoneMarrow
+B62E1,Read2,CancerOfBloodOrBoneMarrow
+B62E2,Read2,CancerOfBloodOrBoneMarrow
+B62E3,Read2,CancerOfBloodOrBoneMarrow
+B62E4,Read2,CancerOfBloodOrBoneMarrow
+B62E5,Read2,CancerOfBloodOrBoneMarrow
+B62E6,Read2,CancerOfBloodOrBoneMarrow
+B62E6-1,Read2,CancerOfBloodOrBoneMarrow
+B62E7,Read2,CancerOfBloodOrBoneMarrow
+B62E7-1,Read2,CancerOfBloodOrBoneMarrow
+B62E8,Read2,CancerOfBloodOrBoneMarrow
+B62E9,Read2,CancerOfBloodOrBoneMarrow
+B62EA,Read2,CancerOfBloodOrBoneMarrow
+B62EW,Read2,CancerOfBloodOrBoneMarrow
+B62F,Read2,CancerOfBloodOrBoneMarrow
+B62F-1,Read2,CancerOfBloodOrBoneMarrow
+B62F0,Read2,CancerOfBloodOrBoneMarrow
+B62F1,Read2,CancerOfBloodOrBoneMarrow
+B62F2,Read2,CancerOfBloodOrBoneMarrow
+B62FY,Read2,CancerOfBloodOrBoneMarrow
+B62X,Read2,CancerOfBloodOrBoneMarrow
+B62X0,Read2,CancerOfBloodOrBoneMarrow
+B62X1,Read2,CancerOfBloodOrBoneMarrow
+B62X2,Read2,CancerOfBloodOrBoneMarrow
+B62X3,Read2,CancerOfBloodOrBoneMarrow
+B62X4,Read2,CancerOfBloodOrBoneMarrow
+B62X5,Read2,CancerOfBloodOrBoneMarrow
+B62X6,Read2,CancerOfBloodOrBoneMarrow
+B62XX,Read2,CancerOfBloodOrBoneMarrow
+B62Y,Read2,CancerOfBloodOrBoneMarrow
+B62Y0,Read2,CancerOfBloodOrBoneMarrow
+B62Y1,Read2,CancerOfBloodOrBoneMarrow
+B62Y2,Read2,CancerOfBloodOrBoneMarrow
+B62Y3,Read2,CancerOfBloodOrBoneMarrow
+B62Y4,Read2,CancerOfBloodOrBoneMarrow
+B62Y5,Read2,CancerOfBloodOrBoneMarrow
+B62Y6,Read2,CancerOfBloodOrBoneMarrow
+B62Y7,Read2,CancerOfBloodOrBoneMarrow
+B62Y8,Read2,CancerOfBloodOrBoneMarrow
+B62YZ,Read2,CancerOfBloodOrBoneMarrow
+B62Z,Read2,CancerOfBloodOrBoneMarrow
+B62Z0,Read2,CancerOfBloodOrBoneMarrow
+B62Z1,Read2,CancerOfBloodOrBoneMarrow
+B62Z2,Read2,CancerOfBloodOrBoneMarrow
+B62Z3,Read2,CancerOfBloodOrBoneMarrow
+B62Z4,Read2,CancerOfBloodOrBoneMarrow
+B62Z5,Read2,CancerOfBloodOrBoneMarrow
+B62Z6,Read2,CancerOfBloodOrBoneMarrow
+B62Z7,Read2,CancerOfBloodOrBoneMarrow
+B62Z8,Read2,CancerOfBloodOrBoneMarrow
+B62ZZ,Read2,CancerOfBloodOrBoneMarrow
+B62ZZ-1,Read2,CancerOfBloodOrBoneMarrow
+B63,Read2,CancerOfBloodOrBoneMarrow
+B63-99,Read2,CancerOfBloodOrBoneMarrow
+B630,Read2,CancerOfBloodOrBoneMarrow
+B630-1,Read2,CancerOfBloodOrBoneMarrow
+B630-2,Read2,CancerOfBloodOrBoneMarrow
+B6300,Read2,CancerOfBloodOrBoneMarrow
+B6300-1,Read2,CancerOfBloodOrBoneMarrow
+B6301,Read2,CancerOfBloodOrBoneMarrow
+B6302,Read2,CancerOfBloodOrBoneMarrow
+B6303,Read2,CancerOfBloodOrBoneMarrow
+B6304,Read2,CancerOfBloodOrBoneMarrow
+B631,Read2,CancerOfBloodOrBoneMarrow
+B63Y,Read2,CancerOfBloodOrBoneMarrow
+B63Z,Read2,CancerOfBloodOrBoneMarrow
+B63Z-99,Read2,CancerOfBloodOrBoneMarrow
+B64,Read2,CancerOfBloodOrBoneMarrow
+B64-1,Read2,CancerOfBloodOrBoneMarrow
+B640,Read2,CancerOfBloodOrBoneMarrow
+B640-99,Read2,CancerOfBloodOrBoneMarrow
+B6400,Read2,CancerOfBloodOrBoneMarrow
+B6400-1,Read2,CancerOfBloodOrBoneMarrow
+B641,Read2,CancerOfBloodOrBoneMarrow
+B641-1,Read2,CancerOfBloodOrBoneMarrow
+B641-99,Read2,CancerOfBloodOrBoneMarrow
+B6410,Read2,CancerOfBloodOrBoneMarrow
+B6410-1,Read2,CancerOfBloodOrBoneMarrow
+B6411,Read2,CancerOfBloodOrBoneMarrow
+B6412,Read2,CancerOfBloodOrBoneMarrow
+B6413,Read2,CancerOfBloodOrBoneMarrow
+B642,Read2,CancerOfBloodOrBoneMarrow
+B642-99,Read2,CancerOfBloodOrBoneMarrow
+B64Y,Read2,CancerOfBloodOrBoneMarrow
+B64Y0,Read2,CancerOfBloodOrBoneMarrow
+B64Y1,Read2,CancerOfBloodOrBoneMarrow
+B64Y2,Read2,CancerOfBloodOrBoneMarrow
+B64Y3,Read2,CancerOfBloodOrBoneMarrow
+B64Y3-1,Read2,CancerOfBloodOrBoneMarrow
+B64Y4,Read2,CancerOfBloodOrBoneMarrow
+B64Y4-1,Read2,CancerOfBloodOrBoneMarrow
+B64Y5,Read2,CancerOfBloodOrBoneMarrow
+B64YZ,Read2,CancerOfBloodOrBoneMarrow
+B64Z,Read2,CancerOfBloodOrBoneMarrow
+B65,Read2,CancerOfBloodOrBoneMarrow
+B650,Read2,CancerOfBloodOrBoneMarrow
+B650-99,Read2,CancerOfBloodOrBoneMarrow
+B6500,Read2,CancerOfBloodOrBoneMarrow
+B6501,Read2,CancerOfBloodOrBoneMarrow
+B651,Read2,CancerOfBloodOrBoneMarrow
+B651-1,Read2,CancerOfBloodOrBoneMarrow
+B651-99,Read2,CancerOfBloodOrBoneMarrow
+B6510,Read2,CancerOfBloodOrBoneMarrow
+B6511,Read2,CancerOfBloodOrBoneMarrow
+B6512,Read2,CancerOfBloodOrBoneMarrow
+B6513,Read2,CancerOfBloodOrBoneMarrow
+B651Z,Read2,CancerOfBloodOrBoneMarrow
+B652,Read2,CancerOfBloodOrBoneMarrow
+B652-99,Read2,CancerOfBloodOrBoneMarrow
+B653,Read2,CancerOfBloodOrBoneMarrow
+B6530,Read2,CancerOfBloodOrBoneMarrow
+B6531,Read2,CancerOfBloodOrBoneMarrow
+B653Z,Read2,CancerOfBloodOrBoneMarrow
+B654,Read2,CancerOfBloodOrBoneMarrow
+B65Y,Read2,CancerOfBloodOrBoneMarrow
+B65Y0,Read2,CancerOfBloodOrBoneMarrow
+B65Y1,Read2,CancerOfBloodOrBoneMarrow
+B65YZ,Read2,CancerOfBloodOrBoneMarrow
+B65Z,Read2,CancerOfBloodOrBoneMarrow
+B66,Read2,CancerOfBloodOrBoneMarrow
+B66-1,Read2,CancerOfBloodOrBoneMarrow
+B66-2,Read2,CancerOfBloodOrBoneMarrow
+B660,Read2,CancerOfBloodOrBoneMarrow
+B660-99,Read2,CancerOfBloodOrBoneMarrow
+B661,Read2,CancerOfBloodOrBoneMarrow
+B661-99,Read2,CancerOfBloodOrBoneMarrow
+B662,Read2,CancerOfBloodOrBoneMarrow
+B662-99,Read2,CancerOfBloodOrBoneMarrow
+B663,Read2,CancerOfBloodOrBoneMarrow
+B66Y,Read2,CancerOfBloodOrBoneMarrow
+B66Y0,Read2,CancerOfBloodOrBoneMarrow
+B66YZ,Read2,CancerOfBloodOrBoneMarrow
+B66Z,Read2,CancerOfBloodOrBoneMarrow
+B67,Read2,CancerOfBloodOrBoneMarrow
+B67-98,Read2,CancerOfBloodOrBoneMarrow
+B67-99,Read2,CancerOfBloodOrBoneMarrow
+B670,Read2,CancerOfBloodOrBoneMarrow
+B670-1,Read2,CancerOfBloodOrBoneMarrow
+B671,Read2,CancerOfBloodOrBoneMarrow
+B671-1,Read2,CancerOfBloodOrBoneMarrow
+B672,Read2,CancerOfBloodOrBoneMarrow
+B672-1,Read2,CancerOfBloodOrBoneMarrow
+B673,Read2,CancerOfBloodOrBoneMarrow
+B674,Read2,CancerOfBloodOrBoneMarrow
+B675,Read2,CancerOfBloodOrBoneMarrow
+B67Y,Read2,CancerOfBloodOrBoneMarrow
+B67Y0,Read2,CancerOfBloodOrBoneMarrow
+B67YZ,Read2,CancerOfBloodOrBoneMarrow
+B67Z,Read2,CancerOfBloodOrBoneMarrow
+B67Z-99,Read2,CancerOfBloodOrBoneMarrow
+B68,Read2,CancerOfBloodOrBoneMarrow
+B68-99,Read2,CancerOfBloodOrBoneMarrow
+B680,Read2,CancerOfBloodOrBoneMarrow
+B680-99,Read2,CancerOfBloodOrBoneMarrow
+B681,Read2,CancerOfBloodOrBoneMarrow
+B681-99,Read2,CancerOfBloodOrBoneMarrow
+B682,Read2,CancerOfBloodOrBoneMarrow
+B682-99,Read2,CancerOfBloodOrBoneMarrow
+B68Y,Read2,CancerOfBloodOrBoneMarrow
+B68Z,Read2,CancerOfBloodOrBoneMarrow
+B68Z-99,Read2,CancerOfBloodOrBoneMarrow
+B69,Read2,CancerOfBloodOrBoneMarrow
+B690,Read2,CancerOfBloodOrBoneMarrow
+B691,Read2,CancerOfBloodOrBoneMarrow
+B692,Read2,CancerOfBloodOrBoneMarrow
+B6Y,Read2,CancerOfBloodOrBoneMarrow
+B6Y0,Read2,CancerOfBloodOrBoneMarrow
+B6Y0-1,Read2,CancerOfBloodOrBoneMarrow
+B6Y1,Read2,CancerOfBloodOrBoneMarrow
+B6Y1-1,Read2,CancerOfBloodOrBoneMarrow
+B6Z,Read2,CancerOfBloodOrBoneMarrow
+B6Z-99,Read2,CancerOfBloodOrBoneMarrow
+B6Z0,Read2,CancerOfBloodOrBoneMarrow
+B936,Read2,CancerOfBloodOrBoneMarrow
+B936-1,Read2,CancerOfBloodOrBoneMarrow
+B936-2,Read2,CancerOfBloodOrBoneMarrow
+B937,Read2,CancerOfBloodOrBoneMarrow
+B937-1,Read2,CancerOfBloodOrBoneMarrow
+B937-2,Read2,CancerOfBloodOrBoneMarrow
+B937-3,Read2,CancerOfBloodOrBoneMarrow
+B937-4,Read2,CancerOfBloodOrBoneMarrow
+B9370,Read2,CancerOfBloodOrBoneMarrow
+B9371,Read2,CancerOfBloodOrBoneMarrow
+B9372,Read2,CancerOfBloodOrBoneMarrow
+B9373,Read2,CancerOfBloodOrBoneMarrow
+B9374,Read2,CancerOfBloodOrBoneMarrow
+B9374-1,Read2,CancerOfBloodOrBoneMarrow
+B9375,Read2,CancerOfBloodOrBoneMarrow
+B9376,Read2,CancerOfBloodOrBoneMarrow
+B9377,Read2,CancerOfBloodOrBoneMarrow
+B9378,Read2,CancerOfBloodOrBoneMarrow
+B9379,Read2,CancerOfBloodOrBoneMarrow
+B9379-1,Read2,CancerOfBloodOrBoneMarrow
+B937W,Read2,CancerOfBloodOrBoneMarrow
+B937W-1,Read2,CancerOfBloodOrBoneMarrow
+B937X,Read2,CancerOfBloodOrBoneMarrow
+BBN0-1,Read2,CancerOfBloodOrBoneMarrow
+BBR,Read2,CancerOfBloodOrBoneMarrow
+BBR0,Read2,CancerOfBloodOrBoneMarrow
+BBR00,Read2,CancerOfBloodOrBoneMarrow
+BBR01,Read2,CancerOfBloodOrBoneMarrow
+BBR01-1,Read2,CancerOfBloodOrBoneMarrow
+BBR01-2,Read2,CancerOfBloodOrBoneMarrow
+BBR01-3,Read2,CancerOfBloodOrBoneMarrow
+BBR02,Read2,CancerOfBloodOrBoneMarrow
+BBR03,Read2,CancerOfBloodOrBoneMarrow
+BBR04,Read2,CancerOfBloodOrBoneMarrow
+BBR0Z,Read2,CancerOfBloodOrBoneMarrow
+BBR1,Read2,CancerOfBloodOrBoneMarrow
+BBR10,Read2,CancerOfBloodOrBoneMarrow
+BBR10-1,Read2,CancerOfBloodOrBoneMarrow
+BBR1Z,Read2,CancerOfBloodOrBoneMarrow
+BBR2,Read2,CancerOfBloodOrBoneMarrow
+BBR20,Read2,CancerOfBloodOrBoneMarrow
+BBR20-1,Read2,CancerOfBloodOrBoneMarrow
+BBR21,Read2,CancerOfBloodOrBoneMarrow
+BBR22,Read2,CancerOfBloodOrBoneMarrow
+BBR23,Read2,CancerOfBloodOrBoneMarrow
+BBR24,Read2,CancerOfBloodOrBoneMarrow
+BBR25,Read2,CancerOfBloodOrBoneMarrow
+BBR26,Read2,CancerOfBloodOrBoneMarrow
+BBR27,Read2,CancerOfBloodOrBoneMarrow
+BBR2Z,Read2,CancerOfBloodOrBoneMarrow
+BBR3,Read2,CancerOfBloodOrBoneMarrow
+BBR30,Read2,CancerOfBloodOrBoneMarrow
+BBR3Z,Read2,CancerOfBloodOrBoneMarrow
+BBR4,Read2,CancerOfBloodOrBoneMarrow
+BBR40,Read2,CancerOfBloodOrBoneMarrow
+BBR40-1,Read2,CancerOfBloodOrBoneMarrow
+BBR41,Read2,CancerOfBloodOrBoneMarrow
+BBR41-1,Read2,CancerOfBloodOrBoneMarrow
+BBR42,Read2,CancerOfBloodOrBoneMarrow
+BBR4Z,Read2,CancerOfBloodOrBoneMarrow
+BBR5,Read2,CancerOfBloodOrBoneMarrow
+BBR50,Read2,CancerOfBloodOrBoneMarrow
+BBR5Z,Read2,CancerOfBloodOrBoneMarrow
+BBR6,Read2,CancerOfBloodOrBoneMarrow
+BBR60,Read2,CancerOfBloodOrBoneMarrow
+BBR60-1,Read2,CancerOfBloodOrBoneMarrow
+BBR60-2,Read2,CancerOfBloodOrBoneMarrow
+BBR61,Read2,CancerOfBloodOrBoneMarrow
+BBR62,Read2,CancerOfBloodOrBoneMarrow
+BBR63,Read2,CancerOfBloodOrBoneMarrow
+BBR63-1,Read2,CancerOfBloodOrBoneMarrow
+BBR64,Read2,CancerOfBloodOrBoneMarrow
+BBR65,Read2,CancerOfBloodOrBoneMarrow
+BBR66,Read2,CancerOfBloodOrBoneMarrow
+BBR67,Read2,CancerOfBloodOrBoneMarrow
+BBR68,Read2,CancerOfBloodOrBoneMarrow
+BBR69,Read2,CancerOfBloodOrBoneMarrow
+BBR6Z,Read2,CancerOfBloodOrBoneMarrow
+BBR7,Read2,CancerOfBloodOrBoneMarrow
+BBR70,Read2,CancerOfBloodOrBoneMarrow
+BBR7Z,Read2,CancerOfBloodOrBoneMarrow
+BBR8,Read2,CancerOfBloodOrBoneMarrow
+BBR80,Read2,CancerOfBloodOrBoneMarrow
+BBR8Z,Read2,CancerOfBloodOrBoneMarrow
+BBR9,Read2,CancerOfBloodOrBoneMarrow
+BBR90,Read2,CancerOfBloodOrBoneMarrow
+BBR90-1,Read2,CancerOfBloodOrBoneMarrow
+BBR90-2,Read2,CancerOfBloodOrBoneMarrow
+BBR91,Read2,CancerOfBloodOrBoneMarrow
+BBR92,Read2,CancerOfBloodOrBoneMarrow
+BBR93,Read2,CancerOfBloodOrBoneMarrow
+BBR94,Read2,CancerOfBloodOrBoneMarrow
+BBR9Z,Read2,CancerOfBloodOrBoneMarrow
+BBRA,Read2,CancerOfBloodOrBoneMarrow
+BBRA0,Read2,CancerOfBloodOrBoneMarrow
+BBRA1,Read2,CancerOfBloodOrBoneMarrow
+BBRA1-1,Read2,CancerOfBloodOrBoneMarrow
+BBRA2,Read2,CancerOfBloodOrBoneMarrow
+BBRA3,Read2,CancerOfBloodOrBoneMarrow
+BBRA3-1,Read2,CancerOfBloodOrBoneMarrow
+BBRA3-2,Read2,CancerOfBloodOrBoneMarrow
+BBRA4,Read2,CancerOfBloodOrBoneMarrow
+BBRA4-1,Read2,CancerOfBloodOrBoneMarrow
+BBRA5,Read2,CancerOfBloodOrBoneMarrow
+BBRA6,Read2,CancerOfBloodOrBoneMarrow
+BBRA7,Read2,CancerOfBloodOrBoneMarrow
+BBRA8,Read2,CancerOfBloodOrBoneMarrow
+BBRAZ,Read2,CancerOfBloodOrBoneMarrow
+BBRZ,Read2,CancerOfBloodOrBoneMarrow
+BYUD,Read2,CancerOfBloodOrBoneMarrow
+BYUD0,Read2,CancerOfBloodOrBoneMarrow
+BYUD1,Read2,CancerOfBloodOrBoneMarrow
+BYUD2,Read2,CancerOfBloodOrBoneMarrow
+BYUD3,Read2,CancerOfBloodOrBoneMarrow
+BYUD4,Read2,CancerOfBloodOrBoneMarrow
+BYUD5,Read2,CancerOfBloodOrBoneMarrow
+BYUD6,Read2,CancerOfBloodOrBoneMarrow
+BYUD7,Read2,CancerOfBloodOrBoneMarrow
+BYUD8,Read2,CancerOfBloodOrBoneMarrow
+BYUD9,Read2,CancerOfBloodOrBoneMarrow
+BYUDA,Read2,CancerOfBloodOrBoneMarrow
+BYUDB,Read2,CancerOfBloodOrBoneMarrow
+BYUDC,Read2,CancerOfBloodOrBoneMarrow
+BYUDD,Read2,CancerOfBloodOrBoneMarrow
+BYUDE,Read2,CancerOfBloodOrBoneMarrow
+BYUDF,Read2,CancerOfBloodOrBoneMarrow
+BYUDF-1,Read2,CancerOfBloodOrBoneMarrow
+C10,Read2,Diabetes
+C100,Read2,Diabetes
+C1000,Read2,Diabetes
+C1000-1,Read2,Diabetes
+C1000-99,Read2,Diabetes
+C1001,Read2,Diabetes
+C1001-1,Read2,Diabetes
+C1001-2,Read2,Diabetes
+C1001-99,Read2,Diabetes
+C100Z,Read2,Diabetes
+C101,Read2,Diabetes
+C101-99,Read2,Diabetes
+C1010,Read2,Diabetes
+C1011,Read2,Diabetes
+C101Y,Read2,Diabetes
+C101Z,Read2,Diabetes
+C102,Read2,Diabetes
+C1020,Read2,Diabetes
+C1021,Read2,Diabetes
+C102Z,Read2,Diabetes
+C103,Read2,Diabetes
+C103-99,Read2,Diabetes
+C1030,Read2,Diabetes
+C1031,Read2,Diabetes
+C103Y,Read2,Diabetes
+C103Y-99,Read2,Diabetes
+C103Z,Read2,Diabetes
+C104,Read2,Diabetes
+C104-1,Read2,Diabetes
+C104-99,Read2,Diabetes
+C1040,Read2,Diabetes
+C1041,Read2,Diabetes
+C104Y,Read2,Diabetes
+C104Z,Read2,Diabetes
+C105,Read2,Diabetes
+C105-99,Read2,Diabetes
+C1050,Read2,Diabetes
+C1051,Read2,Diabetes
+C105Y,Read2,Diabetes
+C105Z,Read2,Diabetes
+C106,Read2,Diabetes
+C106-1,Read2,Diabetes
+C106-2,Read2,Diabetes
+C106-3,Read2,Diabetes
+C106-99,Read2,Diabetes
+C1060,Read2,Diabetes
+C1061,Read2,Diabetes
+C106Y,Read2,Diabetes
+C106Z,Read2,Diabetes
+C107,Read2,Diabetes
+C107-1,Read2,Diabetes
+C107-2,Read2,Diabetes
+C107-99,Read2,Diabetes
+C1070,Read2,Diabetes
+C1071,Read2,Diabetes
+C1072,Read2,Diabetes
+C1073,Read2,Diabetes
+C1074,Read2,Diabetes
+C107Y,Read2,Diabetes
+C107Z,Read2,Diabetes
+C108,Read2,Diabetes
+C108-1,Read2,Diabetes
+C108-2,Read2,Diabetes
+C108-3,Read2,Diabetes
+C1080,Read2,Diabetes
+C1080-1,Read2,Diabetes
+C1080-2,Read2,Diabetes
+C1081,Read2,Diabetes
+C1081-1,Read2,Diabetes
+C1081-2,Read2,Diabetes
+C1082,Read2,Diabetes
+C1082-1,Read2,Diabetes
+C1082-2,Read2,Diabetes
+C1083,Read2,Diabetes
+C1083-1,Read2,Diabetes
+C1083-2,Read2,Diabetes
+C1084,Read2,Diabetes
+C1084-1,Read2,Diabetes
+C1084-2,Read2,Diabetes
+C1085-1,Read2,Diabetes
+C1085-2,Read2,Diabetes
+C1086,Read2,Diabetes
+C1086-1,Read2,Diabetes
+C1086-2,Read2,Diabetes
+C1087,Read2,Diabetes
+C1087-1,Read2,Diabetes
+C1087-2,Read2,Diabetes
+C1088,Read2,Diabetes
+C1088-1,Read2,Diabetes
+C1088-2,Read2,Diabetes
+C1089,Read2,Diabetes
+C1089-1,Read2,Diabetes
+C1089-2,Read2,Diabetes
+C108A,Read2,Diabetes
+C108A-1,Read2,Diabetes
+C108A-2,Read2,Diabetes
+C108B,Read2,Diabetes
+C108B-1,Read2,Diabetes
+C108B-2,Read2,Diabetes
+C108C,Read2,Diabetes
+C108C-1,Read2,Diabetes
+C108C-2,Read2,Diabetes
+C108D,Read2,Diabetes
+C108D-1,Read2,Diabetes
+C108D-2,Read2,Diabetes
+C108E,Read2,Diabetes
+C108E-1,Read2,Diabetes
+C108E-2,Read2,Diabetes
+C108F,Read2,Diabetes
+C108F-1,Read2,Diabetes
+C108F-2,Read2,Diabetes
+C108G,Read2,Diabetes
+C108G-1,Read2,Diabetes
+C108G-2,Read2,Diabetes
+C108H,Read2,Diabetes
+C108H-1,Read2,Diabetes
+C108H-2,Read2,Diabetes
+C108J,Read2,Diabetes
+C108J-1,Read2,Diabetes
+C108J-2,Read2,Diabetes
+C108Y,Read2,Diabetes
+C108Z,Read2,Diabetes
+C109,Read2,Diabetes
+C109-1,Read2,Diabetes
+C109-2,Read2,Diabetes
+C109-3,Read2,Diabetes
+C1090,Read2,Diabetes
+C1090-1,Read2,Diabetes
+C1090-2,Read2,Diabetes
+C1091,Read2,Diabetes
+C1091-1,Read2,Diabetes
+C1091-2,Read2,Diabetes
+C1092,Read2,Diabetes
+C1092-1,Read2,Diabetes
+C1092-2,Read2,Diabetes
+C1093,Read2,Diabetes
+C1093-1,Read2,Diabetes
+C1093-2,Read2,Diabetes
+C1094,Read2,Diabetes
+C1094-1,Read2,Diabetes
+C1094-2,Read2,Diabetes
+C1095,Read2,Diabetes
+C1095-1,Read2,Diabetes
+C1095-2,Read2,Diabetes
+C1096,Read2,Diabetes
+C1096-1,Read2,Diabetes
+C1096-2,Read2,Diabetes
+C1097,Read2,Diabetes
+C1097-1,Read2,Diabetes
+C1097-2,Read2,Diabetes
+C1099,Read2,Diabetes
+C1099-1,Read2,Diabetes
+C1099-2,Read2,Diabetes
+C109A,Read2,Diabetes
+C109A-1,Read2,Diabetes
+C109A-2,Read2,Diabetes
+C109B,Read2,Diabetes
+C109B-1,Read2,Diabetes
+C109B-2,Read2,Diabetes
+C109C,Read2,Diabetes
+C109C-1,Read2,Diabetes
+C109C-2,Read2,Diabetes
+C109D,Read2,Diabetes
+C109D-1,Read2,Diabetes
+C109D-2,Read2,Diabetes
+C109E,Read2,Diabetes
+C109E-1,Read2,Diabetes
+C109E-2,Read2,Diabetes
+C109F,Read2,Diabetes
+C109F-1,Read2,Diabetes
+C109F-2,Read2,Diabetes
+C109G,Read2,Diabetes
+C109G-1,Read2,Diabetes
+C109G-2,Read2,Diabetes
+C109H,Read2,Diabetes
+C109H-1,Read2,Diabetes
+C109H-2,Read2,Diabetes
+C109J,Read2,Diabetes
+C109J-1,Read2,Diabetes
+C109J-2,Read2,Diabetes
+C109K,Read2,Diabetes
+C10A,Read2,Diabetes
+C10A0,Read2,Diabetes
+C10A1,Read2,Diabetes
+C10A2,Read2,Diabetes
+C10A3,Read2,Diabetes
+C10A4,Read2,Diabetes
+C10A5,Read2,Diabetes
+C10A6,Read2,Diabetes
+C10A7,Read2,Diabetes
+C10AW,Read2,Diabetes
+C10AX,Read2,Diabetes
+C10B,Read2,Diabetes
+C10B0,Read2,Diabetes
+C10C,Read2,Diabetes
+C10C-1,Read2,Diabetes
+C10C-2,Read2,Diabetes
+C10D,Read2,Diabetes
+C10D-1,Read2,Diabetes
+C10E,Read2,Diabetes
+C10E-1,Read2,Diabetes
+C10E-2,Read2,Diabetes
+C10E0,Read2,Diabetes
+C10E0-1,Read2,Diabetes
+C10E0-2,Read2,Diabetes
+C10E1,Read2,Diabetes
+C10E1-1,Read2,Diabetes
+C10E1-2,Read2,Diabetes
+C10E2,Read2,Diabetes
+C10E2-1,Read2,Diabetes
+C10E2-2,Read2,Diabetes
+C10E3,Read2,Diabetes
+C10E3-1,Read2,Diabetes
+C10E3-2,Read2,Diabetes
+C10E4,Read2,Diabetes
+C10E4-1,Read2,Diabetes
+C10E4-2,Read2,Diabetes
+C10E5,Read2,Diabetes
+C10E5-1,Read2,Diabetes
+C10E6,Read2,Diabetes
+C10E6-1,Read2,Diabetes
+C10E6-2,Read2,Diabetes
+C10E7,Read2,Diabetes
+C10E7-1,Read2,Diabetes
+C10E7-2,Read2,Diabetes
+C10E8,Read2,Diabetes
+C10E8-1,Read2,Diabetes
+C10E8-2,Read2,Diabetes
+C10E9,Read2,Diabetes
+C10E9-1,Read2,Diabetes
+C10E9-2,Read2,Diabetes
+C10EA,Read2,Diabetes
+C10EA-1,Read2,Diabetes
+C10EA-2,Read2,Diabetes
+C10EB,Read2,Diabetes
+C10EB-1,Read2,Diabetes
+C10EB-2,Read2,Diabetes
+C10EC,Read2,Diabetes
+C10EC-1,Read2,Diabetes
+C10EC-2,Read2,Diabetes
+C10ED,Read2,Diabetes
+C10ED-1,Read2,Diabetes
+C10ED-2,Read2,Diabetes
+C10EE,Read2,Diabetes
+C10EE-1,Read2,Diabetes
+C10EE-2,Read2,Diabetes
+C10EF,Read2,Diabetes
+C10EF-1,Read2,Diabetes
+C10EF-2,Read2,Diabetes
+C10EG,Read2,Diabetes
+C10EG-1,Read2,Diabetes
+C10EG-2,Read2,Diabetes
+C10EH,Read2,Diabetes
+C10EH-1,Read2,Diabetes
+C10EH-2,Read2,Diabetes
+C10EJ,Read2,Diabetes
+C10EJ-1,Read2,Diabetes
+C10EJ-2,Read2,Diabetes
+C10EK,Read2,Diabetes
+C10EK-1,Read2,Diabetes
+C10EL,Read2,Diabetes
+C10EL-1,Read2,Diabetes
+C10EM,Read2,Diabetes
+C10EM-1,Read2,Diabetes
+C10EN,Read2,Diabetes
+C10EN-1,Read2,Diabetes
+C10EP,Read2,Diabetes
+C10EP-1,Read2,Diabetes
+C10EQ,Read2,Diabetes
+C10EQ-1,Read2,Diabetes
+C10ER,Read2,Diabetes
+C10F,Read2,Diabetes
+C10F-1,Read2,Diabetes
+C10F0,Read2,Diabetes
+C10F0-1,Read2,Diabetes
+C10F1,Read2,Diabetes
+C10F1-1,Read2,Diabetes
+C10F2,Read2,Diabetes
+C10F2-1,Read2,Diabetes
+C10F3,Read2,Diabetes
+C10F3-1,Read2,Diabetes
+C10F4,Read2,Diabetes
+C10F4-1,Read2,Diabetes
+C10F5,Read2,Diabetes
+C10F5-1,Read2,Diabetes
+C10F6,Read2,Diabetes
+C10F6-1,Read2,Diabetes
+C10F7,Read2,Diabetes
+C10F7-1,Read2,Diabetes
+C10F9,Read2,Diabetes
+C10F9-1,Read2,Diabetes
+C10FA,Read2,Diabetes
+C10FA-1,Read2,Diabetes
+C10FB,Read2,Diabetes
+C10FB-1,Read2,Diabetes
+C10FC,Read2,Diabetes
+C10FC-1,Read2,Diabetes
+C10FD,Read2,Diabetes
+C10FD-1,Read2,Diabetes
+C10FE,Read2,Diabetes
+C10FE-1,Read2,Diabetes
+C10FF,Read2,Diabetes
+C10FF-1,Read2,Diabetes
+C10FG,Read2,Diabetes
+C10FG-1,Read2,Diabetes
+C10FH,Read2,Diabetes
+C10FH-1,Read2,Diabetes
+C10FJ,Read2,Diabetes
+C10FJ-1,Read2,Diabetes
+C10FK,Read2,Diabetes
+C10FL,Read2,Diabetes
+C10FL-1,Read2,Diabetes
+C10FM,Read2,Diabetes
+C10FM-1,Read2,Diabetes
+C10FN,Read2,Diabetes
+C10FN-1,Read2,Diabetes
+C10FP,Read2,Diabetes
+C10FP-1,Read2,Diabetes
+C10FQ,Read2,Diabetes
+C10FQ-1,Read2,Diabetes
+C10FR,Read2,Diabetes
+C10G,Read2,Diabetes
+C10G0,Read2,Diabetes
+C10H,Read2,Diabetes
+C10H0,Read2,Diabetes
+C10J,Read2,Diabetes
+C10J0,Read2,Diabetes
+C10K,Read2,Diabetes
+C10K0,Read2,Diabetes
+C10L,Read2,Diabetes
+C10L0,Read2,Diabetes
+C10M,Read2,Diabetes
+C10M0,Read2,Diabetes
+C10N,Read2,Diabetes
+C10N0,Read2,Diabetes
+C10Y,Read2,Diabetes
+C10Y-99,Read2,Diabetes
+C10Y0,Read2,Diabetes
+C10Y1,Read2,Diabetes
+C10YY,Read2,Diabetes
+C10YZ,Read2,Diabetes
+C10YZ-97,Read2,Diabetes
+C10YZ-98,Read2,Diabetes
+C10YZ-99,Read2,Diabetes
+C10Z,Read2,Diabetes
+C10Z0,Read2,Diabetes
+C10Z1,Read2,Diabetes
+C10ZY,Read2,Diabetes
+C10ZZ,Read2,Diabetes
+C3104,Read2,LiverCirrhosis
+C3500-2,Read2,LiverCirrhosis
+C370,Read2,CysticFibrosisBronchiectasisAlveolitis
+C370-1,Read2,CysticFibrosisBronchiectasisAlveolitis
+C370-2,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3700,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3701,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3701-1,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3702,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3703,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3704,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3705,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3707,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3708,Read2,CysticFibrosisBronchiectasisAlveolitis
+C3708,Read2,LiverCirrhosis
+C3709,Read2,CysticFibrosisBronchiectasisAlveolitis
+C370Y,Read2,CysticFibrosisBronchiectasisAlveolitis
+C370Y-1,Read2,CysticFibrosisBronchiectasisAlveolitis
+C370Z,Read2,CysticFibrosisBronchiectasisAlveolitis
+C39-99,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390-99,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3900,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3901,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3902,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3903,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3904,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3905,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3905-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3905-2,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3905-3,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3906,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3907,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3908,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3909,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390A,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390A-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390B,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390C,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390C-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C390Z,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C391,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3910,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3910-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3910-2,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3911,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3912,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3912-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3913,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C391Z,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C392,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3920,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3921,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3921-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3922,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3923,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3924,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3925,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3926,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3927,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3928,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3929,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C392Z,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C393,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C395,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C396,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C397,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C398,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3980,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3981,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3982,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C399,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C3990,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39A,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39A-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39W,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39X,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39Y0,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39Y1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39Z,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+C39Z-99,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+CYU00,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+CYU01,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+CYU02,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+CYU03,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+CYU04,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+CYU05,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D1042,Read2,SickleCellViaBool
+D1042-1,Read2,SickleCellViaBool
+D106,Read2,SickleCellViaBool
+D1060,Read2,SickleCellViaBool
+D1061,Read2,SickleCellViaBool
+D1062,Read2,SickleCellViaBool
+D1063,Read2,SickleCellViaBool
+D1064,Read2,SickleCellViaBool
+D1065,Read2,SickleCellViaBool
+D106Z,Read2,SickleCellViaBool
+D402,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-1,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-2,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-3,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-4,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-5,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-6,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+D402-7,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+DYU12,Read2,SickleCellViaBool
+E00,Read2,Dementia
+E00-1,Read2,Dementia
+E00-2,Read2,Dementia
+E00-97,Read2,Dementia
+E00-98,Read2,Dementia
+E00-99,Read2,Dementia
+E000,Read2,Dementia
+E000-99,Read2,Dementia
+E001,Read2,Dementia
+E0010,Read2,Dementia
+E0011,Read2,Dementia
+E0012,Read2,Dementia
+E0013,Read2,Dementia
+E001Z,Read2,Dementia
+E002,Read2,Dementia
+E0020,Read2,Dementia
+E0021,Read2,Dementia
+E002Z,Read2,Dementia
+E003,Read2,Dementia
+E003-99,Read2,Dementia
+E004,Read2,Dementia
+E004-1,Read2,Dementia
+E0040,Read2,Dementia
+E0041,Read2,Dementia
+E0042,Read2,Dementia
+E0043,Read2,Dementia
+E004Z,Read2,Dementia
+E00Y,Read2,Dementia
+E00Y-1,Read2,Dementia
+E00Z,Read2,Dementia
+E012,Read2,Dementia
+E012-1,Read2,Dementia
+E02Y1,Read2,Dementia
+E041,Read2,Dementia
+E10,Read2,BipolarDiseaseOrSchizophrenia
+E10-98,Read2,BipolarDiseaseOrSchizophrenia
+E10-99,Read2,BipolarDiseaseOrSchizophrenia
+E100,Read2,BipolarDiseaseOrSchizophrenia
+E100-1,Read2,BipolarDiseaseOrSchizophrenia
+E1000,Read2,BipolarDiseaseOrSchizophrenia
+E1001,Read2,BipolarDiseaseOrSchizophrenia
+E1002,Read2,BipolarDiseaseOrSchizophrenia
+E1003,Read2,BipolarDiseaseOrSchizophrenia
+E1004,Read2,BipolarDiseaseOrSchizophrenia
+E1005,Read2,BipolarDiseaseOrSchizophrenia
+E100Z,Read2,BipolarDiseaseOrSchizophrenia
+E101,Read2,BipolarDiseaseOrSchizophrenia
+E1010,Read2,BipolarDiseaseOrSchizophrenia
+E1011,Read2,BipolarDiseaseOrSchizophrenia
+E1012,Read2,BipolarDiseaseOrSchizophrenia
+E1013,Read2,BipolarDiseaseOrSchizophrenia
+E1014,Read2,BipolarDiseaseOrSchizophrenia
+E1015,Read2,BipolarDiseaseOrSchizophrenia
+E101Z,Read2,BipolarDiseaseOrSchizophrenia
+E102,Read2,BipolarDiseaseOrSchizophrenia
+E1020,Read2,BipolarDiseaseOrSchizophrenia
+E1021,Read2,BipolarDiseaseOrSchizophrenia
+E1022,Read2,BipolarDiseaseOrSchizophrenia
+E1023,Read2,BipolarDiseaseOrSchizophrenia
+E1024,Read2,BipolarDiseaseOrSchizophrenia
+E1025,Read2,BipolarDiseaseOrSchizophrenia
+E102Z,Read2,BipolarDiseaseOrSchizophrenia
+E103,Read2,BipolarDiseaseOrSchizophrenia
+E1030,Read2,BipolarDiseaseOrSchizophrenia
+E1031,Read2,BipolarDiseaseOrSchizophrenia
+E1032,Read2,BipolarDiseaseOrSchizophrenia
+E1033,Read2,BipolarDiseaseOrSchizophrenia
+E1034,Read2,BipolarDiseaseOrSchizophrenia
+E1035,Read2,BipolarDiseaseOrSchizophrenia
+E103Z,Read2,BipolarDiseaseOrSchizophrenia
+E104,Read2,BipolarDiseaseOrSchizophrenia
+E104-1,Read2,BipolarDiseaseOrSchizophrenia
+E105,Read2,BipolarDiseaseOrSchizophrenia
+E1050,Read2,BipolarDiseaseOrSchizophrenia
+E1051,Read2,BipolarDiseaseOrSchizophrenia
+E1052,Read2,BipolarDiseaseOrSchizophrenia
+E1053,Read2,BipolarDiseaseOrSchizophrenia
+E1054,Read2,BipolarDiseaseOrSchizophrenia
+E1055,Read2,BipolarDiseaseOrSchizophrenia
+E105Z,Read2,BipolarDiseaseOrSchizophrenia
+E106,Read2,BipolarDiseaseOrSchizophrenia
+E106-1,Read2,BipolarDiseaseOrSchizophrenia
+E107,Read2,BipolarDiseaseOrSchizophrenia
+E107-1,Read2,BipolarDiseaseOrSchizophrenia
+E107-99,Read2,BipolarDiseaseOrSchizophrenia
+E1070,Read2,BipolarDiseaseOrSchizophrenia
+E1071,Read2,BipolarDiseaseOrSchizophrenia
+E1072,Read2,BipolarDiseaseOrSchizophrenia
+E1073,Read2,BipolarDiseaseOrSchizophrenia
+E1074,Read2,BipolarDiseaseOrSchizophrenia
+E1075,Read2,BipolarDiseaseOrSchizophrenia
+E107Z,Read2,BipolarDiseaseOrSchizophrenia
+E10Y,Read2,BipolarDiseaseOrSchizophrenia
+E10Y-1,Read2,BipolarDiseaseOrSchizophrenia
+E10Y0,Read2,BipolarDiseaseOrSchizophrenia
+E10Y1,Read2,BipolarDiseaseOrSchizophrenia
+E10YZ,Read2,BipolarDiseaseOrSchizophrenia
+E10Z,Read2,BipolarDiseaseOrSchizophrenia
+E11,Read2,BipolarDiseaseOrSchizophrenia
+E11-1,Read2,BipolarDiseaseOrSchizophrenia
+E11-3,Read2,BipolarDiseaseOrSchizophrenia
+E110,Read2,BipolarDiseaseOrSchizophrenia
+E110-1,Read2,BipolarDiseaseOrSchizophrenia
+E110-99,Read2,BipolarDiseaseOrSchizophrenia
+E1100,Read2,BipolarDiseaseOrSchizophrenia
+E1101,Read2,BipolarDiseaseOrSchizophrenia
+E1102,Read2,BipolarDiseaseOrSchizophrenia
+E1103,Read2,BipolarDiseaseOrSchizophrenia
+E1104,Read2,BipolarDiseaseOrSchizophrenia
+E1105,Read2,BipolarDiseaseOrSchizophrenia
+E1106,Read2,BipolarDiseaseOrSchizophrenia
+E110Z,Read2,BipolarDiseaseOrSchizophrenia
+E111,Read2,BipolarDiseaseOrSchizophrenia
+E1110,Read2,BipolarDiseaseOrSchizophrenia
+E1111,Read2,BipolarDiseaseOrSchizophrenia
+E1112,Read2,BipolarDiseaseOrSchizophrenia
+E1113,Read2,BipolarDiseaseOrSchizophrenia
+E1114,Read2,BipolarDiseaseOrSchizophrenia
+E1115,Read2,BipolarDiseaseOrSchizophrenia
+E1116,Read2,BipolarDiseaseOrSchizophrenia
+E111Z,Read2,BipolarDiseaseOrSchizophrenia
+E114,Read2,BipolarDiseaseOrSchizophrenia
+E114-1,Read2,BipolarDiseaseOrSchizophrenia
+E1140,Read2,BipolarDiseaseOrSchizophrenia
+E1141,Read2,BipolarDiseaseOrSchizophrenia
+E1142,Read2,BipolarDiseaseOrSchizophrenia
+E1143,Read2,BipolarDiseaseOrSchizophrenia
+E1144,Read2,BipolarDiseaseOrSchizophrenia
+E1145,Read2,BipolarDiseaseOrSchizophrenia
+E1146,Read2,BipolarDiseaseOrSchizophrenia
+E114Z,Read2,BipolarDiseaseOrSchizophrenia
+E115,Read2,BipolarDiseaseOrSchizophrenia
+E115-1,Read2,BipolarDiseaseOrSchizophrenia
+E1150,Read2,BipolarDiseaseOrSchizophrenia
+E1151,Read2,BipolarDiseaseOrSchizophrenia
+E1152,Read2,BipolarDiseaseOrSchizophrenia
+E1153,Read2,BipolarDiseaseOrSchizophrenia
+E1154,Read2,BipolarDiseaseOrSchizophrenia
+E1155,Read2,BipolarDiseaseOrSchizophrenia
+E1156,Read2,BipolarDiseaseOrSchizophrenia
+E115Z,Read2,BipolarDiseaseOrSchizophrenia
+E116,Read2,BipolarDiseaseOrSchizophrenia
+E1160,Read2,BipolarDiseaseOrSchizophrenia
+E1161,Read2,BipolarDiseaseOrSchizophrenia
+E1162,Read2,BipolarDiseaseOrSchizophrenia
+E1163,Read2,BipolarDiseaseOrSchizophrenia
+E1164,Read2,BipolarDiseaseOrSchizophrenia
+E1165,Read2,BipolarDiseaseOrSchizophrenia
+E1166,Read2,BipolarDiseaseOrSchizophrenia
+E116Z,Read2,BipolarDiseaseOrSchizophrenia
+E117,Read2,BipolarDiseaseOrSchizophrenia
+E1170,Read2,BipolarDiseaseOrSchizophrenia
+E1171,Read2,BipolarDiseaseOrSchizophrenia
+E1172,Read2,BipolarDiseaseOrSchizophrenia
+E1173,Read2,BipolarDiseaseOrSchizophrenia
+E1174,Read2,BipolarDiseaseOrSchizophrenia
+E1175,Read2,BipolarDiseaseOrSchizophrenia
+E1176,Read2,BipolarDiseaseOrSchizophrenia
+E117Z,Read2,BipolarDiseaseOrSchizophrenia
+E11Y,Read2,BipolarDiseaseOrSchizophrenia
+E11Y0,Read2,BipolarDiseaseOrSchizophrenia
+E11Y1,Read2,BipolarDiseaseOrSchizophrenia
+E11Y3,Read2,BipolarDiseaseOrSchizophrenia
+E11YZ,Read2,BipolarDiseaseOrSchizophrenia
+E11Z,Read2,BipolarDiseaseOrSchizophrenia
+E140,Read2,LearningDisabilityOrDownsSyndrome
+E140-1,Read2,LearningDisabilityOrDownsSyndrome
+E140-2,Read2,LearningDisabilityOrDownsSyndrome
+E140-3,Read2,LearningDisabilityOrDownsSyndrome
+E1400,Read2,LearningDisabilityOrDownsSyndrome
+E1401,Read2,LearningDisabilityOrDownsSyndrome
+E140Z,Read2,LearningDisabilityOrDownsSyndrome
+E2A-KC60,Read2,HivOrAids
+E2B-KC60,Read2,HivOrAids
+E2E1,Read2,LearningDisabilityOrDownsSyndrome
+E2F2,Read2,LearningDisabilityOrDownsSyndrome
+E3,Read2,LearningDisabilityOrDownsSyndrome
+E3-98,Read2,LearningDisabilityOrDownsSyndrome
+E3-99,Read2,LearningDisabilityOrDownsSyndrome
+E30,Read2,LearningDisabilityOrDownsSyndrome
+E30-1,Read2,LearningDisabilityOrDownsSyndrome
+E30-2,Read2,LearningDisabilityOrDownsSyndrome
+E30-3,Read2,LearningDisabilityOrDownsSyndrome
+E30-99,Read2,LearningDisabilityOrDownsSyndrome
+E31,Read2,LearningDisabilityOrDownsSyndrome
+E310,Read2,LearningDisabilityOrDownsSyndrome
+E310-1,Read2,LearningDisabilityOrDownsSyndrome
+E310-99,Read2,LearningDisabilityOrDownsSyndrome
+E311,Read2,LearningDisabilityOrDownsSyndrome
+E311-99,Read2,LearningDisabilityOrDownsSyndrome
+E312,Read2,LearningDisabilityOrDownsSyndrome
+E312-1,Read2,LearningDisabilityOrDownsSyndrome
+E31Z,Read2,LearningDisabilityOrDownsSyndrome
+E31Z-99,Read2,LearningDisabilityOrDownsSyndrome
+E3A-KC60,Read2,HivOrAids
+E3B-KC60,Read2,HivOrAids
+E3Y,Read2,LearningDisabilityOrDownsSyndrome
+E3Z,Read2,LearningDisabilityOrDownsSyndrome
+EGTON218,Read2,LearningDisabilityOrDownsSyndrome
+EGTON41,Read2,HivOrAids
+EGTON67,Read2,CysticFibrosisBronchiectasisAlveolitis
+EMISCHO1,Read2,HousingCategory
+EMISHGT58,Read2,LearningDisabilityOrDownsSyndrome
+EMISNQAC788,Read2,HousingCategory
+EMISNQAC795,Read2,HousingCategory
+EMISNQAC876,Read2,Asthma
+EMISNQAC877,Read2,Asthma
+EMISNQAS79,Read2,HousingCategory
+EMISNQCH21,Read2,ChronicKidneyDisease
+EMISNQCI2,Read2,LiverCirrhosis
+EMISNQDD1,Read2,Dementia
+EMISNQDD2,Read2,Dementia
+EMISNQDD3,Read2,Dementia
+EMISNQDE142,Read2,HousingCategory
+EMISNQDV1,Read2,Dementia
+EMISNQHO13,Read2,HivOrAids
+EMISNQIM22,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+EMISNQMA105,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+EMISNQMU11,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+EMISNQMU12,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+EMISNQMU13,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+EMISNQRE209,Read2,CerebralPalsy
+EMISNQRE521,Read2,HousingCategory
+EMISNQRE524,Read2,HousingCategory
+EMISNQRE525,Read2,HousingCategory
+EMISNQRE615,Read2,HousingCategory
+EMISNQSI34,Read2,SickleCellViaBool
+EMISNQTH23,Read2,PulmonaryHypertensionOrFibrosis
+EMISNQUN32,Read2,HousingCategory
+EMISQPS1,Read2,LearningDisabilityOrDownsSyndrome
+EMISQRE10,Read2,LearningDisabilityOrDownsSyndrome
+EMISR4QCH1,Read2,Copd
+ESCTIM3,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+ESCTLE1,Read2,CongenitalHeartProblem
+EU0,Read2,Dementia
+EU00,Read2,Dementia
+EU000,Read2,Dementia
+EU000-1,Read2,Dementia
+EU000-2,Read2,Dementia
+EU000-3,Read2,Dementia
+EU001,Read2,Dementia
+EU001-1,Read2,Dementia
+EU001-2,Read2,Dementia
+EU001-3,Read2,Dementia
+EU002,Read2,Dementia
+EU00Z,Read2,Dementia
+EU00Z-1,Read2,Dementia
+EU01,Read2,Dementia
+EU01-1,Read2,Dementia
+EU010,Read2,Dementia
+EU011,Read2,Dementia
+EU011-1,Read2,Dementia
+EU012,Read2,Dementia
+EU013,Read2,Dementia
+EU01Y,Read2,Dementia
+EU01Z,Read2,Dementia
+EU02,Read2,Dementia
+EU020,Read2,Dementia
+EU021,Read2,Dementia
+EU022,Read2,Dementia
+EU023,Read2,Dementia
+EU023,Read2,ParkinsonsDisease
+EU024,Read2,Dementia
+EU024,Read2,HivOrAids
+EU025,Read2,Dementia
+EU02Y,Read2,Dementia
+EU02Z,Read2,Dementia
+EU02Z-1,Read2,Dementia
+EU02Z-2,Read2,Dementia
+EU02Z-3,Read2,Dementia
+EU02Z-4,Read2,Dementia
+EU02Z-5,Read2,Dementia
+EU02Z-6,Read2,Dementia
+EU041,Read2,Dementia
+EU107-1,Read2,Dementia
+EU13Z,Read2,LearningDisabilityOrDownsSyndrome
+EU2,Read2,BipolarDiseaseOrSchizophrenia
+EU20,Read2,BipolarDiseaseOrSchizophrenia
+EU200,Read2,BipolarDiseaseOrSchizophrenia
+EU200-1,Read2,BipolarDiseaseOrSchizophrenia
+EU201,Read2,BipolarDiseaseOrSchizophrenia
+EU201-1,Read2,BipolarDiseaseOrSchizophrenia
+EU202,Read2,BipolarDiseaseOrSchizophrenia
+EU202-1,Read2,BipolarDiseaseOrSchizophrenia
+EU202-2,Read2,BipolarDiseaseOrSchizophrenia
+EU202-3,Read2,BipolarDiseaseOrSchizophrenia
+EU202-4,Read2,BipolarDiseaseOrSchizophrenia
+EU203,Read2,BipolarDiseaseOrSchizophrenia
+EU203-1,Read2,BipolarDiseaseOrSchizophrenia
+EU204,Read2,BipolarDiseaseOrSchizophrenia
+EU205,Read2,BipolarDiseaseOrSchizophrenia
+EU205-1,Read2,BipolarDiseaseOrSchizophrenia
+EU205-2,Read2,BipolarDiseaseOrSchizophrenia
+EU206,Read2,BipolarDiseaseOrSchizophrenia
+EU20Y,Read2,BipolarDiseaseOrSchizophrenia
+EU20Y-1,Read2,BipolarDiseaseOrSchizophrenia
+EU20Y-2,Read2,BipolarDiseaseOrSchizophrenia
+EU20Y-3,Read2,BipolarDiseaseOrSchizophrenia
+EU20Z,Read2,BipolarDiseaseOrSchizophrenia
+EU21-2,Read2,BipolarDiseaseOrSchizophrenia
+EU21-3,Read2,BipolarDiseaseOrSchizophrenia
+EU21-4,Read2,BipolarDiseaseOrSchizophrenia
+EU21-5,Read2,BipolarDiseaseOrSchizophrenia
+EU21-6,Read2,BipolarDiseaseOrSchizophrenia
+EU21-7,Read2,BipolarDiseaseOrSchizophrenia
+EU21-8,Read2,BipolarDiseaseOrSchizophrenia
+EU231-1,Read2,BipolarDiseaseOrSchizophrenia
+EU231-2,Read2,BipolarDiseaseOrSchizophrenia
+EU25,Read2,BipolarDiseaseOrSchizophrenia
+EU250,Read2,BipolarDiseaseOrSchizophrenia
+EU250-1,Read2,BipolarDiseaseOrSchizophrenia
+EU250-2,Read2,BipolarDiseaseOrSchizophrenia
+EU251,Read2,BipolarDiseaseOrSchizophrenia
+EU251-1,Read2,BipolarDiseaseOrSchizophrenia
+EU251-2,Read2,BipolarDiseaseOrSchizophrenia
+EU252,Read2,BipolarDiseaseOrSchizophrenia
+EU252-1,Read2,BipolarDiseaseOrSchizophrenia
+EU252-2,Read2,BipolarDiseaseOrSchizophrenia
+EU25Y,Read2,BipolarDiseaseOrSchizophrenia
+EU25Z,Read2,BipolarDiseaseOrSchizophrenia
+EU25Z-1,Read2,BipolarDiseaseOrSchizophrenia
+EU30,Read2,BipolarDiseaseOrSchizophrenia
+EU30-1,Read2,BipolarDiseaseOrSchizophrenia
+EU302-3,Read2,BipolarDiseaseOrSchizophrenia
+EU30Y,Read2,BipolarDiseaseOrSchizophrenia
+EU30Z,Read2,BipolarDiseaseOrSchizophrenia
+EU31,Read2,BipolarDiseaseOrSchizophrenia
+EU31-1,Read2,BipolarDiseaseOrSchizophrenia
+EU31-2,Read2,BipolarDiseaseOrSchizophrenia
+EU31-3,Read2,BipolarDiseaseOrSchizophrenia
+EU310,Read2,BipolarDiseaseOrSchizophrenia
+EU311,Read2,BipolarDiseaseOrSchizophrenia
+EU312,Read2,BipolarDiseaseOrSchizophrenia
+EU313,Read2,BipolarDiseaseOrSchizophrenia
+EU315,Read2,BipolarDiseaseOrSchizophrenia
+EU316,Read2,BipolarDiseaseOrSchizophrenia
+EU317,Read2,BipolarDiseaseOrSchizophrenia
+EU318,Read2,BipolarDiseaseOrSchizophrenia
+EU319,Read2,BipolarDiseaseOrSchizophrenia
+EU319-1,Read2,BipolarDiseaseOrSchizophrenia
+EU31Y,Read2,BipolarDiseaseOrSchizophrenia
+EU31Y-1,Read2,BipolarDiseaseOrSchizophrenia
+EU31Y-2,Read2,BipolarDiseaseOrSchizophrenia
+EU31Z,Read2,BipolarDiseaseOrSchizophrenia
+EU333-2,Read2,BipolarDiseaseOrSchizophrenia
+EU333-3,Read2,BipolarDiseaseOrSchizophrenia
+EU7,Read2,LearningDisabilityOrDownsSyndrome
+EU70,Read2,LearningDisabilityOrDownsSyndrome
+EU70-1,Read2,LearningDisabilityOrDownsSyndrome
+EU70-2,Read2,LearningDisabilityOrDownsSyndrome
+EU700,Read2,LearningDisabilityOrDownsSyndrome
+EU701,Read2,LearningDisabilityOrDownsSyndrome
+EU70Y,Read2,LearningDisabilityOrDownsSyndrome
+EU70Z,Read2,LearningDisabilityOrDownsSyndrome
+EU71,Read2,LearningDisabilityOrDownsSyndrome
+EU71-1,Read2,LearningDisabilityOrDownsSyndrome
+EU710,Read2,LearningDisabilityOrDownsSyndrome
+EU711,Read2,LearningDisabilityOrDownsSyndrome
+EU71Y,Read2,LearningDisabilityOrDownsSyndrome
+EU71Z,Read2,LearningDisabilityOrDownsSyndrome
+EU72,Read2,LearningDisabilityOrDownsSyndrome
+EU72-1,Read2,LearningDisabilityOrDownsSyndrome
+EU720,Read2,LearningDisabilityOrDownsSyndrome
+EU721,Read2,LearningDisabilityOrDownsSyndrome
+EU72Y,Read2,LearningDisabilityOrDownsSyndrome
+EU72Z,Read2,LearningDisabilityOrDownsSyndrome
+EU73,Read2,LearningDisabilityOrDownsSyndrome
+EU73-1,Read2,LearningDisabilityOrDownsSyndrome
+EU730,Read2,LearningDisabilityOrDownsSyndrome
+EU731,Read2,LearningDisabilityOrDownsSyndrome
+EU73Y,Read2,LearningDisabilityOrDownsSyndrome
+EU73Z,Read2,LearningDisabilityOrDownsSyndrome
+EU7Y,Read2,LearningDisabilityOrDownsSyndrome
+EU7Y0,Read2,LearningDisabilityOrDownsSyndrome
+EU7Y1,Read2,LearningDisabilityOrDownsSyndrome
+EU7YY,Read2,LearningDisabilityOrDownsSyndrome
+EU7YZ,Read2,LearningDisabilityOrDownsSyndrome
+EU7Z,Read2,LearningDisabilityOrDownsSyndrome
+EU7Z-1,Read2,LearningDisabilityOrDownsSyndrome
+EU7Z-2,Read2,LearningDisabilityOrDownsSyndrome
+EU7Z0,Read2,LearningDisabilityOrDownsSyndrome
+EU7Z1,Read2,LearningDisabilityOrDownsSyndrome
+EU7ZY,Read2,LearningDisabilityOrDownsSyndrome
+EU7ZZ,Read2,LearningDisabilityOrDownsSyndrome
+EU80,Read2,LearningDisabilityOrDownsSyndrome
+EU800,Read2,LearningDisabilityOrDownsSyndrome
+EU800-1,Read2,LearningDisabilityOrDownsSyndrome
+EU800-2,Read2,LearningDisabilityOrDownsSyndrome
+EU800-3,Read2,LearningDisabilityOrDownsSyndrome
+EU800-4,Read2,LearningDisabilityOrDownsSyndrome
+EU800-5,Read2,LearningDisabilityOrDownsSyndrome
+EU801,Read2,LearningDisabilityOrDownsSyndrome
+EU801-1,Read2,LearningDisabilityOrDownsSyndrome
+EU801-2,Read2,LearningDisabilityOrDownsSyndrome
+EU802,Read2,LearningDisabilityOrDownsSyndrome
+EU802-1,Read2,LearningDisabilityOrDownsSyndrome
+EU802-2,Read2,LearningDisabilityOrDownsSyndrome
+EU802-3,Read2,LearningDisabilityOrDownsSyndrome
+EU802-4,Read2,LearningDisabilityOrDownsSyndrome
+EU802-5,Read2,LearningDisabilityOrDownsSyndrome
+EU803,Read2,LearningDisabilityOrDownsSyndrome
+EU80Y,Read2,LearningDisabilityOrDownsSyndrome
+EU80Z,Read2,LearningDisabilityOrDownsSyndrome
+EU80Z-1,Read2,LearningDisabilityOrDownsSyndrome
+EU81,Read2,LearningDisabilityOrDownsSyndrome
+EU810,Read2,LearningDisabilityOrDownsSyndrome
+EU810-1,Read2,LearningDisabilityOrDownsSyndrome
+EU810-2,Read2,LearningDisabilityOrDownsSyndrome
+EU810-3,Read2,LearningDisabilityOrDownsSyndrome
+EU811,Read2,LearningDisabilityOrDownsSyndrome
+EU811-1,Read2,LearningDisabilityOrDownsSyndrome
+EU812,Read2,LearningDisabilityOrDownsSyndrome
+EU812-1,Read2,LearningDisabilityOrDownsSyndrome
+EU812-2,Read2,LearningDisabilityOrDownsSyndrome
+EU812-3,Read2,LearningDisabilityOrDownsSyndrome
+EU813,Read2,LearningDisabilityOrDownsSyndrome
+EU814,Read2,LearningDisabilityOrDownsSyndrome
+EU815,Read2,LearningDisabilityOrDownsSyndrome
+EU816,Read2,LearningDisabilityOrDownsSyndrome
+EU817,Read2,LearningDisabilityOrDownsSyndrome
+EU818,Read2,LearningDisabilityOrDownsSyndrome
+EU81Y,Read2,LearningDisabilityOrDownsSyndrome
+EU81Y-1,Read2,LearningDisabilityOrDownsSyndrome
+EU81Z,Read2,LearningDisabilityOrDownsSyndrome
+EU81Z-1,Read2,LearningDisabilityOrDownsSyndrome
+EU81Z-2,Read2,LearningDisabilityOrDownsSyndrome
+EU81Z-3,Read2,LearningDisabilityOrDownsSyndrome
+EU82,Read2,LearningDisabilityOrDownsSyndrome
+EU83,Read2,LearningDisabilityOrDownsSyndrome
+EU84,Read2,LearningDisabilityOrDownsSyndrome
+EU840,Read2,LearningDisabilityOrDownsSyndrome
+EU840-1,Read2,LearningDisabilityOrDownsSyndrome
+EU840-2,Read2,LearningDisabilityOrDownsSyndrome
+EU840-3,Read2,LearningDisabilityOrDownsSyndrome
+EU840-4,Read2,LearningDisabilityOrDownsSyndrome
+EU841,Read2,LearningDisabilityOrDownsSyndrome
+EU841-1,Read2,LearningDisabilityOrDownsSyndrome
+EU841-2,Read2,LearningDisabilityOrDownsSyndrome
+EU842,Read2,LearningDisabilityOrDownsSyndrome
+EU843,Read2,LearningDisabilityOrDownsSyndrome
+EU843-1,Read2,LearningDisabilityOrDownsSyndrome
+EU843-2,Read2,LearningDisabilityOrDownsSyndrome
+EU843-3,Read2,LearningDisabilityOrDownsSyndrome
+EU844,Read2,LearningDisabilityOrDownsSyndrome
+EU845,Read2,LearningDisabilityOrDownsSyndrome
+EU845-1,Read2,LearningDisabilityOrDownsSyndrome
+EU84Y,Read2,LearningDisabilityOrDownsSyndrome
+EU84Z,Read2,LearningDisabilityOrDownsSyndrome
+EU84Z-1,Read2,LearningDisabilityOrDownsSyndrome
+EU8Y,Read2,LearningDisabilityOrDownsSyndrome
+EU8Y-1,Read2,LearningDisabilityOrDownsSyndrome
+EU8Z,Read2,LearningDisabilityOrDownsSyndrome
+F051,Read2,ThrombosisOrPulmonaryEmbolus
+F0510,Read2,ThrombosisOrPulmonaryEmbolus
+F0511,Read2,ThrombosisOrPulmonaryEmbolus
+F0512,Read2,ThrombosisOrPulmonaryEmbolus
+F0513,Read2,ThrombosisOrPulmonaryEmbolus
+F051Z,Read2,ThrombosisOrPulmonaryEmbolus
+F110,Read2,Dementia
+F1100,Read2,Dementia
+F1101,Read2,Dementia
+F111,Read2,Dementia
+F112,Read2,Dementia
+F112-99,Read2,Dementia
+F116,Read2,Dementia
+F118,Read2,Dementia
+F12,Read2,ParkinsonsDisease
+F120,Read2,ParkinsonsDisease
+F121,Read2,ParkinsonsDisease
+F121-1,Read2,ParkinsonsDisease
+F121-99,Read2,ParkinsonsDisease
+F122,Read2,ParkinsonsDisease
+F123,Read2,ParkinsonsDisease
+F12W,Read2,ParkinsonsDisease
+F12X,Read2,ParkinsonsDisease
+F12Z,Read2,ParkinsonsDisease
+F1321,Read2,Epilepsy
+F134,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F137-1,Read2,CerebralPalsy
+F1370,Read2,CerebralPalsy
+F13Z,Read2,LearningDisabilityOrDownsSyndrome
+F152,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F1520,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F1521,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F1521-1,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F1522,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F1523,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F1524,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F152Z,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F20,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F20-1,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F200,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F201,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F202,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F203,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F204,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F205,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F206,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F207,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F208,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F20Z,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F21Y2,Read2,Dementia
+F21Y2-1,Read2,Dementia
+F23,Read2,CerebralPalsy
+F23-1,Read2,CerebralPalsy
+F23-2,Read2,CerebralPalsy
+F2301,Read2,CerebralPalsy
+F2301-1,Read2,CerebralPalsy
+F23Y,Read2,CerebralPalsy
+F23Y0,Read2,CerebralPalsy
+F23Y1,Read2,CerebralPalsy
+F23Y2,Read2,CerebralPalsy
+F23Y3,Read2,CerebralPalsy
+F23Y4,Read2,CerebralPalsy
+F23Y6,Read2,CerebralPalsy
+F23Y6-1,Read2,CerebralPalsy
+F23YZ,Read2,CerebralPalsy
+F23Z,Read2,CerebralPalsy
+F25,Read2,Epilepsy
+F250,Read2,Epilepsy
+F2500,Read2,Epilepsy
+F2500-1,Read2,Epilepsy
+F2500-99,Read2,Epilepsy
+F2501,Read2,Epilepsy
+F2502,Read2,Epilepsy
+F2503,Read2,Epilepsy
+F2504,Read2,Epilepsy
+F2505,Read2,Epilepsy
+F250Y,Read2,Epilepsy
+F250Z,Read2,Epilepsy
+F251,Read2,Epilepsy
+F2510,Read2,Epilepsy
+F2510-1,Read2,Epilepsy
+F2510-99,Read2,Epilepsy
+F2511,Read2,Epilepsy
+F2511-1,Read2,Epilepsy
+F2512,Read2,Epilepsy
+F2513,Read2,Epilepsy
+F2514,Read2,Epilepsy
+F2515,Read2,Epilepsy
+F251Y,Read2,Epilepsy
+F251Z,Read2,Epilepsy
+F252,Read2,Epilepsy
+F253,Read2,Epilepsy
+F253-1,Read2,Epilepsy
+F254,Read2,Epilepsy
+F2540,Read2,Epilepsy
+F2541,Read2,Epilepsy
+F2542,Read2,Epilepsy
+F2543,Read2,Epilepsy
+F2544,Read2,Epilepsy
+F2545,Read2,Epilepsy
+F2545-99,Read2,Epilepsy
+F254Z,Read2,Epilepsy
+F255,Read2,Epilepsy
+F2550,Read2,Epilepsy
+F2550-1,Read2,Epilepsy
+F2550-2,Read2,Epilepsy
+F2551,Read2,Epilepsy
+F2552,Read2,Epilepsy
+F2553,Read2,Epilepsy
+F2553-1,Read2,Epilepsy
+F2554,Read2,Epilepsy
+F2555,Read2,Epilepsy
+F2556,Read2,Epilepsy
+F255Y,Read2,Epilepsy
+F255Z,Read2,Epilepsy
+F256,Read2,Epilepsy
+F256-1,Read2,Epilepsy
+F256-2,Read2,Epilepsy
+F256-99,Read2,Epilepsy
+F2560,Read2,Epilepsy
+F2561,Read2,Epilepsy
+F256Z,Read2,Epilepsy
+F257,Read2,Epilepsy
+F258,Read2,Epilepsy
+F259,Read2,Epilepsy
+F259-1,Read2,Epilepsy
+F25A,Read2,Epilepsy
+F25B,Read2,Epilepsy
+F25C,Read2,Epilepsy
+F25D,Read2,Epilepsy
+F25E,Read2,Epilepsy
+F25F,Read2,Epilepsy
+F25X,Read2,Epilepsy
+F25Y,Read2,Epilepsy
+F25Y0,Read2,Epilepsy
+F25Y1,Read2,Epilepsy
+F25Y2,Read2,Epilepsy
+F25Y3,Read2,Epilepsy
+F25Y4,Read2,Epilepsy
+F25YZ,Read2,Epilepsy
+F25Z,Read2,Epilepsy
+F2B,Read2,CerebralPalsy
+F2B0,Read2,CerebralPalsy
+F2B1,Read2,CerebralPalsy
+F2B2,Read2,CerebralPalsy
+F2BY,Read2,CerebralPalsy
+F2BZ,Read2,CerebralPalsy
+F380,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F3800,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F3801,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F380Z,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F4221,Read2,SickleCellViaBool
+F4236,Read2,StrokeOrTia
+F4238-1,Read2,ThrombosisOrPulmonaryEmbolus
+FYU30,Read2,Dementia
+FYU55,Read2,StrokeOrTia
+FYU9,Read2,CerebralPalsy
+FYU90,Read2,CerebralPalsy
+G1YZ1,Read2,HeartFailure
+G3,Read2,CoronaryHeartDisease
+G3-1,Read2,CoronaryHeartDisease
+G3-2,Read2,CoronaryHeartDisease
+G3-3,Read2,CoronaryHeartDisease
+G30,Read2,CoronaryHeartDisease
+G30-1,Read2,CoronaryHeartDisease
+G30-2,Read2,CoronaryHeartDisease
+G30-3,Read2,CoronaryHeartDisease
+G30-4,Read2,CoronaryHeartDisease
+G30-5,Read2,CoronaryHeartDisease
+G30-6,Read2,CoronaryHeartDisease
+G30-7,Read2,CoronaryHeartDisease
+G30-98,Read2,CoronaryHeartDisease
+G30-99,Read2,CoronaryHeartDisease
+G300,Read2,CoronaryHeartDisease
+G301,Read2,CoronaryHeartDisease
+G3010,Read2,CoronaryHeartDisease
+G3011,Read2,CoronaryHeartDisease
+G301Z,Read2,CoronaryHeartDisease
+G302,Read2,CoronaryHeartDisease
+G303,Read2,CoronaryHeartDisease
+G304,Read2,CoronaryHeartDisease
+G305,Read2,CoronaryHeartDisease
+G306,Read2,CoronaryHeartDisease
+G307,Read2,CoronaryHeartDisease
+G3070,Read2,CoronaryHeartDisease
+G3071,Read2,CoronaryHeartDisease
+G308,Read2,CoronaryHeartDisease
+G309,Read2,CoronaryHeartDisease
+G30A,Read2,CoronaryHeartDisease
+G30B,Read2,CoronaryHeartDisease
+G30X,Read2,CoronaryHeartDisease
+G30X0,Read2,CoronaryHeartDisease
+G30Y,Read2,CoronaryHeartDisease
+G30Y0,Read2,CoronaryHeartDisease
+G30Y1,Read2,CoronaryHeartDisease
+G30Y2,Read2,CoronaryHeartDisease
+G30YZ,Read2,CoronaryHeartDisease
+G30Z,Read2,CoronaryHeartDisease
+G31,Read2,CoronaryHeartDisease
+G31-99,Read2,CoronaryHeartDisease
+G310,Read2,CoronaryHeartDisease
+G310-1,Read2,CoronaryHeartDisease
+G311,Read2,CoronaryHeartDisease
+G311-1,Read2,CoronaryHeartDisease
+G311-2,Read2,CoronaryHeartDisease
+G311-3,Read2,CoronaryHeartDisease
+G311-4,Read2,CoronaryHeartDisease
+G3110,Read2,CoronaryHeartDisease
+G3110-1,Read2,CoronaryHeartDisease
+G3111,Read2,CoronaryHeartDisease
+G3112,Read2,CoronaryHeartDisease
+G3113,Read2,CoronaryHeartDisease
+G3114,Read2,CoronaryHeartDisease
+G3115,Read2,CoronaryHeartDisease
+G311Z,Read2,CoronaryHeartDisease
+G312,Read2,CoronaryHeartDisease
+G31Y,Read2,CoronaryHeartDisease
+G31Y0,Read2,CoronaryHeartDisease
+G31Y0-99,Read2,CoronaryHeartDisease
+G31Y1,Read2,CoronaryHeartDisease
+G31Y2,Read2,CoronaryHeartDisease
+G31Y3,Read2,CoronaryHeartDisease
+G31YZ,Read2,CoronaryHeartDisease
+G32,Read2,CoronaryHeartDisease
+G32-1,Read2,CoronaryHeartDisease
+G32-2,Read2,CoronaryHeartDisease
+G33,Read2,CoronaryHeartDisease
+G330,Read2,CoronaryHeartDisease
+G3300,Read2,CoronaryHeartDisease
+G330Z,Read2,CoronaryHeartDisease
+G331,Read2,CoronaryHeartDisease
+G331-1,Read2,CoronaryHeartDisease
+G332,Read2,CoronaryHeartDisease
+G33Z,Read2,CoronaryHeartDisease
+G33Z0,Read2,CoronaryHeartDisease
+G33Z1,Read2,CoronaryHeartDisease
+G33Z2,Read2,CoronaryHeartDisease
+G33Z3,Read2,CoronaryHeartDisease
+G33Z4,Read2,CoronaryHeartDisease
+G33Z5,Read2,CoronaryHeartDisease
+G33Z6,Read2,CoronaryHeartDisease
+G33Z7,Read2,CoronaryHeartDisease
+G33ZZ,Read2,CoronaryHeartDisease
+G34,Read2,CoronaryHeartDisease
+G34-99,Read2,CoronaryHeartDisease
+G340,Read2,CoronaryHeartDisease
+G340-1,Read2,CoronaryHeartDisease
+G340-2,Read2,CoronaryHeartDisease
+G3400,Read2,CoronaryHeartDisease
+G3401,Read2,CoronaryHeartDisease
+G342,Read2,CoronaryHeartDisease
+G343,Read2,CoronaryHeartDisease
+G344,Read2,CoronaryHeartDisease
+G34Y,Read2,CoronaryHeartDisease
+G34Y0,Read2,CoronaryHeartDisease
+G34Y1,Read2,CoronaryHeartDisease
+G34YZ,Read2,CoronaryHeartDisease
+G34Z,Read2,CoronaryHeartDisease
+G34Z0,Read2,CoronaryHeartDisease
+G35,Read2,CoronaryHeartDisease
+G350,Read2,CoronaryHeartDisease
+G351,Read2,CoronaryHeartDisease
+G353,Read2,CoronaryHeartDisease
+G35X,Read2,CoronaryHeartDisease
+G36,Read2,CoronaryHeartDisease
+G360,Read2,CoronaryHeartDisease
+G361,Read2,CoronaryHeartDisease
+G362,Read2,CoronaryHeartDisease
+G363,Read2,CoronaryHeartDisease
+G364,Read2,CoronaryHeartDisease
+G365,Read2,CoronaryHeartDisease
+G366,Read2,CoronaryHeartDisease
+G38,Read2,CoronaryHeartDisease
+G380,Read2,CoronaryHeartDisease
+G381,Read2,CoronaryHeartDisease
+G382,Read2,CoronaryHeartDisease
+G383,Read2,CoronaryHeartDisease
+G384,Read2,CoronaryHeartDisease
+G38Z,Read2,CoronaryHeartDisease
+G3Y,Read2,CoronaryHeartDisease
+G3Z,Read2,CoronaryHeartDisease
+G401,Read2,ThrombosisOrPulmonaryEmbolus
+G401-1,Read2,ThrombosisOrPulmonaryEmbolus
+G401-2,Read2,ThrombosisOrPulmonaryEmbolus
+G4010,Read2,ThrombosisOrPulmonaryEmbolus
+G4011,Read2,ThrombosisOrPulmonaryEmbolus
+G410,Read2,PulmonaryHypertensionOrFibrosis
+G41Y0,Read2,PulmonaryHypertensionOrFibrosis
+G41Y1,Read2,PulmonaryHypertensionOrFibrosis
+G501,Read2,CoronaryHeartDisease
+G573,Read2,AtrialFibrillation
+G5730,Read2,AtrialFibrillation
+G5732,Read2,AtrialFibrillation
+G5733,Read2,AtrialFibrillation
+G5734,Read2,AtrialFibrillation
+G5735,Read2,AtrialFibrillation
+G5736,Read2,AtrialFibrillation
+G5737,Read2,AtrialFibrillation
+G5738,Read2,AtrialFibrillation
+G5739,Read2,AtrialFibrillation
+G573Z,Read2,AtrialFibrillation
+G58,Read2,HeartFailure
+G58-1,Read2,HeartFailure
+G580,Read2,HeartFailure
+G580-1,Read2,HeartFailure
+G580-2,Read2,HeartFailure
+G580-3,Read2,HeartFailure
+G580-4,Read2,HeartFailure
+G5800,Read2,HeartFailure
+G5801,Read2,HeartFailure
+G5802,Read2,HeartFailure
+G5803,Read2,HeartFailure
+G5804,Read2,HeartFailure
+G581,Read2,HeartFailure
+G581-1,Read2,HeartFailure
+G581-2,Read2,HeartFailure
+G581-3,Read2,HeartFailure
+G5810,Read2,HeartFailure
+G582,Read2,HeartFailure
+G58Z,Read2,HeartFailure
+G58Z-1,Read2,HeartFailure
+G58Z-2,Read2,HeartFailure
+G5YY9,Read2,HeartFailure
+G5YYA,Read2,HeartFailure
+G61,Read2,StrokeOrTia
+G61-1,Read2,StrokeOrTia
+G61-2,Read2,StrokeOrTia
+G61-98,Read2,StrokeOrTia
+G61-99,Read2,StrokeOrTia
+G610,Read2,StrokeOrTia
+G611,Read2,StrokeOrTia
+G612,Read2,StrokeOrTia
+G613,Read2,StrokeOrTia
+G614,Read2,StrokeOrTia
+G615,Read2,StrokeOrTia
+G616,Read2,StrokeOrTia
+G618,Read2,StrokeOrTia
+G61X,Read2,StrokeOrTia
+G61X0,Read2,StrokeOrTia
+G61X1,Read2,StrokeOrTia
+G61Z,Read2,StrokeOrTia
+G63Y0,Read2,StrokeOrTia
+G63Y1,Read2,StrokeOrTia
+G64,Read2,StrokeOrTia
+G64-1,Read2,StrokeOrTia
+G64-2,Read2,StrokeOrTia
+G64-3,Read2,StrokeOrTia
+G640,Read2,StrokeOrTia
+G6400,Read2,StrokeOrTia
+G641,Read2,StrokeOrTia
+G641-1,Read2,StrokeOrTia
+G6410,Read2,StrokeOrTia
+G64Z,Read2,StrokeOrTia
+G64Z-1,Read2,StrokeOrTia
+G64Z-2,Read2,StrokeOrTia
+G64Z-99,Read2,StrokeOrTia
+G64Z0,Read2,StrokeOrTia
+G64Z1,Read2,StrokeOrTia
+G64Z1-1,Read2,StrokeOrTia
+G64Z2,Read2,StrokeOrTia
+G64Z3,Read2,StrokeOrTia
+G64Z4,Read2,StrokeOrTia
+G65,Read2,StrokeOrTia
+G65-1,Read2,StrokeOrTia
+G65-2,Read2,StrokeOrTia
+G65-3,Read2,StrokeOrTia
+G65-99,Read2,StrokeOrTia
+G650,Read2,StrokeOrTia
+G650-1,Read2,StrokeOrTia
+G651,Read2,StrokeOrTia
+G6510,Read2,StrokeOrTia
+G652,Read2,StrokeOrTia
+G653,Read2,StrokeOrTia
+G654,Read2,StrokeOrTia
+G656,Read2,StrokeOrTia
+G65Y,Read2,StrokeOrTia
+G65Z,Read2,StrokeOrTia
+G65Z-99,Read2,StrokeOrTia
+G65Z0,Read2,StrokeOrTia
+G65Z1,Read2,StrokeOrTia
+G65ZZ,Read2,StrokeOrTia
+G66,Read2,StrokeOrTia
+G66-1,Read2,StrokeOrTia
+G66-2,Read2,StrokeOrTia
+G66-3,Read2,StrokeOrTia
+G66-98,Read2,StrokeOrTia
+G66-99,Read2,StrokeOrTia
+G660,Read2,StrokeOrTia
+G661,Read2,StrokeOrTia
+G662,Read2,StrokeOrTia
+G663,Read2,StrokeOrTia
+G664,Read2,StrokeOrTia
+G665,Read2,StrokeOrTia
+G666,Read2,StrokeOrTia
+G667,Read2,StrokeOrTia
+G668,Read2,StrokeOrTia
+G669,Read2,CerebralPalsy
+G676,Read2,ThrombosisOrPulmonaryEmbolus
+G6760,Read2,StrokeOrTia
+G6760,Read2,ThrombosisOrPulmonaryEmbolus
+G6W,Read2,StrokeOrTia
+G6X,Read2,StrokeOrTia
+G73,Read2,PeripheralVascularDisease
+G73-1,Read2,PeripheralVascularDisease
+G73-2,Read2,PeripheralVascularDisease
+G73-3,Read2,PeripheralVascularDisease
+G731,Read2,PeripheralVascularDisease
+G7310,Read2,PeripheralVascularDisease
+G7311,Read2,PeripheralVascularDisease
+G731Z,Read2,PeripheralVascularDisease
+G732,Read2,PeripheralVascularDisease
+G7320,Read2,PeripheralVascularDisease
+G7321,Read2,PeripheralVascularDisease
+G7322,Read2,PeripheralVascularDisease
+G7323,Read2,PeripheralVascularDisease
+G7324,Read2,PeripheralVascularDisease
+G734,Read2,PeripheralVascularDisease
+G73Y,Read2,PeripheralVascularDisease
+G73Y0,Read2,PeripheralVascularDisease
+G73Y1,Read2,PeripheralVascularDisease
+G73Y2,Read2,PeripheralVascularDisease
+G73Y4,Read2,PeripheralVascularDisease
+G73Y4-1,Read2,PeripheralVascularDisease
+G73Y5,Read2,PeripheralVascularDisease
+G73Y5-1,Read2,PeripheralVascularDisease
+G73Y6,Read2,PeripheralVascularDisease
+G73Y7,Read2,PeripheralVascularDisease
+G73Y8,Read2,PeripheralVascularDisease
+G73Y8-1,Read2,PeripheralVascularDisease
+G73YZ,Read2,PeripheralVascularDisease
+G73Z,Read2,PeripheralVascularDisease
+G73Z-99,Read2,PeripheralVascularDisease
+G73Z0,Read2,PeripheralVascularDisease
+G73Z0-1,Read2,PeripheralVascularDisease
+G73ZZ,Read2,PeripheralVascularDisease
+G73ZZ-99,Read2,PeripheralVascularDisease
+G742,Read2,PeripheralVascularDisease
+G7420,Read2,PeripheralVascularDisease
+G7421,Read2,PeripheralVascularDisease
+G7422,Read2,PeripheralVascularDisease
+G7423,Read2,PeripheralVascularDisease
+G7424,Read2,PeripheralVascularDisease
+G7425,Read2,PeripheralVascularDisease
+G7426,Read2,PeripheralVascularDisease
+G7427,Read2,PeripheralVascularDisease
+G7428,Read2,PeripheralVascularDisease
+G7429,Read2,PeripheralVascularDisease
+G742A,Read2,PeripheralVascularDisease
+G742B,Read2,PeripheralVascularDisease
+G742Z,Read2,PeripheralVascularDisease
+G742Z-99,Read2,PeripheralVascularDisease
+G801-1,Read2,ThrombosisOrPulmonaryEmbolus
+G801-2,Read2,ThrombosisOrPulmonaryEmbolus
+G801-3,Read2,ThrombosisOrPulmonaryEmbolus
+G801-99,Read2,ThrombosisOrPulmonaryEmbolus
+G801C,Read2,ThrombosisOrPulmonaryEmbolus
+G801D,Read2,ThrombosisOrPulmonaryEmbolus
+G801D-99,Read2,ThrombosisOrPulmonaryEmbolus
+G801E,Read2,ThrombosisOrPulmonaryEmbolus
+G801F,Read2,ThrombosisOrPulmonaryEmbolus
+G801G,Read2,ThrombosisOrPulmonaryEmbolus
+G820,Read2,ThrombosisOrPulmonaryEmbolus
+G820-1,Read2,ThrombosisOrPulmonaryEmbolus
+G822,Read2,ThrombosisOrPulmonaryEmbolus
+G823,Read2,ThrombosisOrPulmonaryEmbolus
+G824,Read2,ThrombosisOrPulmonaryEmbolus
+G825,Read2,ThrombosisOrPulmonaryEmbolus
+G826,Read2,ThrombosisOrPulmonaryEmbolus
+G827,Read2,ThrombosisOrPulmonaryEmbolus
+G82Y,Read2,ThrombosisOrPulmonaryEmbolus
+G82Z,Read2,ThrombosisOrPulmonaryEmbolus
+G82Z0-99,Read2,ThrombosisOrPulmonaryEmbolus
+G82Z1,Read2,ThrombosisOrPulmonaryEmbolus
+G82Z1-99,Read2,ThrombosisOrPulmonaryEmbolus
+G82ZZ,Read2,ThrombosisOrPulmonaryEmbolus
+G8522,Read2,LiverCirrhosis
+G8523,Read2,LiverCirrhosis
+GYU34,Read2,CoronaryHeartDisease
+GYU62,Read2,StrokeOrTia
+GYU63,Read2,StrokeOrTia
+GYU64,Read2,StrokeOrTia
+GYU65,Read2,StrokeOrTia
+GYU66,Read2,StrokeOrTia
+GYU6F,Read2,StrokeOrTia
+GYU6G,Read2,StrokeOrTia
+GYU74,Read2,PeripheralVascularDisease
+GYU7A,Read2,PeripheralVascularDisease
+H3,Read2,Copd
+H3-1,Read2,Copd
+H3-98,Read2,Copd
+H3-99,Read2,Copd
+H30-2,Read2,Asthma
+H302,Read2,Asthma
+H31,Read2,Copd
+H310,Read2,Copd
+H3100,Read2,Copd
+H310Z,Read2,Copd
+H311,Read2,Copd
+H311-99,Read2,Copd
+H3110,Read2,Copd
+H3111,Read2,Copd
+H311Z,Read2,Copd
+H312,Read2,Copd
+H3120,Read2,Copd
+H3120,Read2,Asthma
+H3120-1,Read2,Copd
+H3120-1,Read2,Asthma
+H3121,Read2,Copd
+H3122,Read2,Copd
+H3123,Read2,Copd
+H312Z,Read2,Copd
+H313,Read2,Copd
+H31Y,Read2,Copd
+H31Y1,Read2,Copd
+H31YZ,Read2,Copd
+H31Z,Read2,Copd
+H32,Read2,Copd
+H320,Read2,Copd
+H3200,Read2,Copd
+H3201,Read2,Copd
+H3202,Read2,Copd
+H3203,Read2,Copd
+H3203-1,Read2,Copd
+H320Z,Read2,Copd
+H321,Read2,Copd
+H322,Read2,Copd
+H32Y,Read2,Copd
+H32Y0,Read2,Copd
+H32Y1,Read2,Copd
+H32Y1-1,Read2,Copd
+H32Y2,Read2,Copd
+H32YZ,Read2,Copd
+H32YZ-1,Read2,Copd
+H32Z,Read2,Copd
+H33,Read2,Asthma
+H33-1,Read2,Asthma
+H330,Read2,Asthma
+H330-1,Read2,Asthma
+H330-2,Read2,Asthma
+H330-3,Read2,Asthma
+H330-4,Read2,Asthma
+H330-99,Read2,Asthma
+H3300,Read2,Asthma
+H3300-1,Read2,Asthma
+H3301,Read2,Asthma
+H3301-1,Read2,Asthma
+H330Z,Read2,Asthma
+H331,Read2,Asthma
+H331-1,Read2,Asthma
+H3310,Read2,Asthma
+H3311,Read2,Asthma
+H3311-1,Read2,Asthma
+H331Z,Read2,Asthma
+H332,Read2,Asthma
+H333,Read2,Asthma
+H334,Read2,Asthma
+H335,Read2,Asthma
+H33Z,Read2,Asthma
+H33Z-1,Read2,Asthma
+H33Z0,Read2,Asthma
+H33Z0-1,Read2,Asthma
+H33Z1,Read2,Asthma
+H33Z1-1,Read2,Asthma
+H33Z2,Read2,Asthma
+H33ZZ,Read2,Asthma
+H33ZZ-1,Read2,Asthma
+H33ZZ-2,Read2,Asthma
+H33ZZ-3,Read2,Asthma
+H34,Read2,CysticFibrosisBronchiectasisAlveolitis
+H340,Read2,CysticFibrosisBronchiectasisAlveolitis
+H341,Read2,CysticFibrosisBronchiectasisAlveolitis
+H34Z,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35-1,Read2,CysticFibrosisBronchiectasisAlveolitis
+H350,Read2,CysticFibrosisBronchiectasisAlveolitis
+H351,Read2,CysticFibrosisBronchiectasisAlveolitis
+H352,Read2,CysticFibrosisBronchiectasisAlveolitis
+H3520,Read2,CysticFibrosisBronchiectasisAlveolitis
+H3521,Read2,CysticFibrosisBronchiectasisAlveolitis
+H352Z,Read2,CysticFibrosisBronchiectasisAlveolitis
+H353,Read2,CysticFibrosisBronchiectasisAlveolitis
+H354,Read2,CysticFibrosisBronchiectasisAlveolitis
+H355,Read2,CysticFibrosisBronchiectasisAlveolitis
+H356,Read2,CysticFibrosisBronchiectasisAlveolitis
+H357,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y0,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y1,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y2,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y3,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y4,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y5,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y6,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y7,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Y7,Read2,Asthma
+H35Y8,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35YZ,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Z,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Z0,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35Z1,Read2,CysticFibrosisBronchiectasisAlveolitis
+H35ZZ,Read2,CysticFibrosisBronchiectasisAlveolitis
+H36,Read2,Copd
+H37,Read2,Copd
+H38,Read2,Copd
+H39,Read2,Copd
+H3A,Read2,Copd
+H3Y,Read2,Copd
+H3Y-1,Read2,Copd
+H3Y0,Read2,Copd
+H3Y1,Read2,Copd
+H3Z,Read2,Copd
+H3Z-1,Read2,Copd
+H3Z-98,Read2,Copd
+H3Z-99,Read2,Copd
+H440,Read2,Asthma
+H442,Read2,Asthma
+H47Y0,Read2,Asthma
+H563-3,Read2,PulmonaryHypertensionOrFibrosis
+H5631,Read2,PulmonaryHypertensionOrFibrosis
+H5631-99,Read2,PulmonaryHypertensionOrFibrosis
+H5632,Read2,PulmonaryHypertensionOrFibrosis
+HMPNQHO4,Read2,SickleCellViaBool
+HNG0019,Read2,PulmonaryHypertensionOrFibrosis
+HNG0052,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+HNG0090,Read2,LiverCirrhosis
+HNG0180,Read2,CerebralPalsy
+HNG0197,Read2,CerebralPalsy
+HNG0234,Read2,StrokeOrTia
+HNG0235,Read2,StrokeOrTia
+HNG0602,Read2,StrokeOrTia
+HNG0603,Read2,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+HNG0625,Read2,LearningDisabilityOrDownsSyndrome
+HNGNQRF130,Read2,Dementia
+HNGNQRF18,Read2,PulmonaryHypertensionOrFibrosis
+HNGNQRF38,Read2,LearningDisabilityOrDownsSyndrome
+HNGNQRF39,Read2,LearningDisabilityOrDownsSyndrome
+HNGNQRF40,Read2,LearningDisabilityOrDownsSyndrome
+HNGNQRF41,Read2,LearningDisabilityOrDownsSyndrome
+HNGZ019,Read2,ThrombosisOrPulmonaryEmbolus
+HYU50,Read2,PulmonaryHypertensionOrFibrosis
+J08Z9,Read2,InflammatoryBowelDisease
+J40,Read2,InflammatoryBowelDisease
+J40-1,Read2,InflammatoryBowelDisease
+J40-2,Read2,InflammatoryBowelDisease
+J40-99,Read2,InflammatoryBowelDisease
+J400,Read2,InflammatoryBowelDisease
+J4000,Read2,InflammatoryBowelDisease
+J4001,Read2,InflammatoryBowelDisease
+J4002,Read2,InflammatoryBowelDisease
+J4003,Read2,InflammatoryBowelDisease
+J4004,Read2,InflammatoryBowelDisease
+J4005,Read2,InflammatoryBowelDisease
+J400Z,Read2,InflammatoryBowelDisease
+J401,Read2,InflammatoryBowelDisease
+J4010,Read2,InflammatoryBowelDisease
+J4011,Read2,InflammatoryBowelDisease
+J4012,Read2,InflammatoryBowelDisease
+J401Z,Read2,InflammatoryBowelDisease
+J401Z-1,Read2,InflammatoryBowelDisease
+J402,Read2,InflammatoryBowelDisease
+J40Z,Read2,InflammatoryBowelDisease
+J40Z-1,Read2,InflammatoryBowelDisease
+J41,Read2,InflammatoryBowelDisease
+J41-1,Read2,InflammatoryBowelDisease
+J41-2,Read2,InflammatoryBowelDisease
+J410,Read2,InflammatoryBowelDisease
+J4100,Read2,InflammatoryBowelDisease
+J4101,Read2,InflammatoryBowelDisease
+J4102,Read2,InflammatoryBowelDisease
+J4103,Read2,InflammatoryBowelDisease
+J4104,Read2,InflammatoryBowelDisease
+J410Z,Read2,InflammatoryBowelDisease
+J411,Read2,InflammatoryBowelDisease
+J412,Read2,InflammatoryBowelDisease
+J413,Read2,InflammatoryBowelDisease
+J41Y,Read2,InflammatoryBowelDisease
+J41Y1,Read2,InflammatoryBowelDisease
+J41YZ,Read2,InflammatoryBowelDisease
+J41Z,Read2,InflammatoryBowelDisease
+J438,Read2,InflammatoryBowelDisease
+J61,Read2,LiverCirrhosis
+J612,Read2,LiverCirrhosis
+J612-1,Read2,LiverCirrhosis
+J612-2,Read2,LiverCirrhosis
+J615,Read2,LiverCirrhosis
+J615-1,Read2,LiverCirrhosis
+J6150,Read2,LiverCirrhosis
+J6151,Read2,LiverCirrhosis
+J6151-1,Read2,LiverCirrhosis
+J6152,Read2,LiverCirrhosis
+J6153,Read2,LiverCirrhosis
+J6154,Read2,LiverCirrhosis
+J6155,Read2,LiverCirrhosis
+J6156,Read2,LiverCirrhosis
+J6157-1,Read2,LiverCirrhosis
+J6158-1,Read2,LiverCirrhosis
+J6158-2,Read2,LiverCirrhosis
+J6159,Read2,LiverCirrhosis
+J615A,Read2,LiverCirrhosis
+J615B,Read2,LiverCirrhosis
+J615C,Read2,LiverCirrhosis
+J615D,Read2,LiverCirrhosis
+J615F,Read2,LiverCirrhosis
+J615H,Read2,LiverCirrhosis
+J615Y,Read2,LiverCirrhosis
+J615Z,Read2,LiverCirrhosis
+J615Z-1,Read2,LiverCirrhosis
+J615Z-2,Read2,LiverCirrhosis
+J615Z-3,Read2,LiverCirrhosis
+J615Z-4,Read2,LiverCirrhosis
+J616,Read2,LiverCirrhosis
+J6160,Read2,LiverCirrhosis
+J6161,Read2,LiverCirrhosis
+J6162,Read2,LiverCirrhosis
+J616Z,Read2,LiverCirrhosis
+J61Y3,Read2,LiverCirrhosis
+J6356,Read2,LiverCirrhosis
+JYU40,Read2,InflammatoryBowelDisease
+JYU41,Read2,InflammatoryBowelDisease
+JYU71,Read2,LiverCirrhosis
+K05,Read2,ChronicKidneyDisease
+K05-2,Read2,ChronicKidneyDisease
+K050,Read2,ChronicKidneyDisease
+K053,Read2,ChronicKidneyDisease
+K054,Read2,ChronicKidneyDisease
+K055,Read2,ChronicKidneyDisease
+K0G,Read2,SickleCellViaBool
+L185-1,Read2,CongenitalHeartProblem
+N000,Read2,RheumatoidArthritisOrSle
+N0000,Read2,RheumatoidArthritisOrSle
+N0001,Read2,RheumatoidArthritisOrSle
+N0002,Read2,RheumatoidArthritisOrSle
+N0003,Read2,RheumatoidArthritisOrSle
+N0004,Read2,RheumatoidArthritisOrSle
+N000Z,Read2,RheumatoidArthritisOrSle
+N0310,Read2,InflammatoryBowelDisease
+N0311,Read2,InflammatoryBowelDisease
+N04,Read2,RheumatoidArthritisOrSle
+N04-1,Read2,RheumatoidArthritisOrSle
+N040,Read2,RheumatoidArthritisOrSle
+N040-90,Read2,RheumatoidArthritisOrSle
+N040-91,Read2,RheumatoidArthritisOrSle
+N040-92,Read2,RheumatoidArthritisOrSle
+N040-93,Read2,RheumatoidArthritisOrSle
+N040-94,Read2,RheumatoidArthritisOrSle
+N040-95,Read2,RheumatoidArthritisOrSle
+N040-96,Read2,RheumatoidArthritisOrSle
+N040-97,Read2,RheumatoidArthritisOrSle
+N040-98,Read2,RheumatoidArthritisOrSle
+N040-99,Read2,RheumatoidArthritisOrSle
+N0400,Read2,RheumatoidArthritisOrSle
+N0401,Read2,RheumatoidArthritisOrSle
+N0402,Read2,RheumatoidArthritisOrSle
+N0403,Read2,RheumatoidArthritisOrSle
+N0404,Read2,RheumatoidArthritisOrSle
+N0405,Read2,RheumatoidArthritisOrSle
+N0406,Read2,RheumatoidArthritisOrSle
+N0407,Read2,RheumatoidArthritisOrSle
+N0407-99,Read2,RheumatoidArthritisOrSle
+N0408,Read2,RheumatoidArthritisOrSle
+N0408-99,Read2,RheumatoidArthritisOrSle
+N0409,Read2,RheumatoidArthritisOrSle
+N040A,Read2,RheumatoidArthritisOrSle
+N040B,Read2,RheumatoidArthritisOrSle
+N040B-99,Read2,RheumatoidArthritisOrSle
+N040C,Read2,RheumatoidArthritisOrSle
+N040D,Read2,RheumatoidArthritisOrSle
+N040D-99,Read2,RheumatoidArthritisOrSle
+N040E,Read2,RheumatoidArthritisOrSle
+N040F,Read2,RheumatoidArthritisOrSle
+N040F-99,Read2,RheumatoidArthritisOrSle
+N040G,Read2,RheumatoidArthritisOrSle
+N040H,Read2,RheumatoidArthritisOrSle
+N040J,Read2,RheumatoidArthritisOrSle
+N040K,Read2,RheumatoidArthritisOrSle
+N040L,Read2,RheumatoidArthritisOrSle
+N040M,Read2,RheumatoidArthritisOrSle
+N040N,Read2,RheumatoidArthritisOrSle
+N040P,Read2,RheumatoidArthritisOrSle
+N040Q,Read2,RheumatoidArthritisOrSle
+N040R,Read2,RheumatoidArthritisOrSle
+N040S,Read2,RheumatoidArthritisOrSle
+N040T,Read2,RheumatoidArthritisOrSle
+N041,Read2,RheumatoidArthritisOrSle
+N042,Read2,RheumatoidArthritisOrSle
+N0421,Read2,RheumatoidArthritisOrSle
+N0422,Read2,RheumatoidArthritisOrSle
+N042Z,Read2,RheumatoidArthritisOrSle
+N043,Read2,RheumatoidArthritisOrSle
+N043-99,Read2,RheumatoidArthritisOrSle
+N0430,Read2,RheumatoidArthritisOrSle
+N0431,Read2,RheumatoidArthritisOrSle
+N0432,Read2,RheumatoidArthritisOrSle
+N0433,Read2,RheumatoidArthritisOrSle
+N043Z,Read2,RheumatoidArthritisOrSle
+N044,Read2,RheumatoidArthritisOrSle
+N044-1,Read2,RheumatoidArthritisOrSle
+N044-2,Read2,RheumatoidArthritisOrSle
+N045,Read2,RheumatoidArthritisOrSle
+N0450,Read2,RheumatoidArthritisOrSle
+N0451,Read2,RheumatoidArthritisOrSle
+N0452,Read2,RheumatoidArthritisOrSle
+N0453,Read2,RheumatoidArthritisOrSle
+N0453,Read2,InflammatoryBowelDisease
+N0454,Read2,RheumatoidArthritisOrSle
+N0454,Read2,InflammatoryBowelDisease
+N0455,Read2,RheumatoidArthritisOrSle
+N0456,Read2,RheumatoidArthritisOrSle
+N047,Read2,RheumatoidArthritisOrSle
+N04X,Read2,RheumatoidArthritisOrSle
+N04Y,Read2,RheumatoidArthritisOrSle
+N04Y0,Read2,RheumatoidArthritisOrSle
+N04Y0-1,Read2,RheumatoidArthritisOrSle
+N04Y0-2,Read2,RheumatoidArthritisOrSle
+N04Y1,Read2,RheumatoidArthritisOrSle
+N04Y1-1,Read2,RheumatoidArthritisOrSle
+N04Y2,Read2,RheumatoidArthritisOrSle
+N04YZ,Read2,RheumatoidArthritisOrSle
+N04Z,Read2,RheumatoidArthritisOrSle
+N04Z-99,Read2,RheumatoidArthritisOrSle
+N3310,Read2,PriorFractureOfHipWristSpineHumerus
+N3311,Read2,PriorFractureOfHipWristSpineHumerus
+N3318,Read2,PriorFractureOfHipWristSpineHumerus
+N3319,Read2,PriorFractureOfHipWristSpineHumerus
+N331A,Read2,PriorFractureOfHipWristSpineHumerus
+N331C,Read2,PriorFractureOfHipWristSpineHumerus
+N331D,Read2,PriorFractureOfHipWristSpineHumerus
+N331E,Read2,PriorFractureOfHipWristSpineHumerus
+N331F,Read2,PriorFractureOfHipWristSpineHumerus
+N331G,Read2,PriorFractureOfHipWristSpineHumerus
+N331H,Read2,PriorFractureOfHipWristSpineHumerus
+N331J,Read2,PriorFractureOfHipWristSpineHumerus
+N331K,Read2,PriorFractureOfHipWristSpineHumerus
+N331L,Read2,PriorFractureOfHipWristSpineHumerus
+N371,Read2,PriorFractureOfHipWristSpineHumerus
+N3710,Read2,PriorFractureOfHipWristSpineHumerus
+N3713,Read2,PriorFractureOfHipWristSpineHumerus
+N371Z,Read2,PriorFractureOfHipWristSpineHumerus
+N3741,Read2,PriorFractureOfHipWristSpineHumerus
+N3746,Read2,PriorFractureOfHipWristSpineHumerus
+P5,Read2,CongenitalHeartProblem
+P5-2,Read2,CongenitalHeartProblem
+P5-98,Read2,CongenitalHeartProblem
+P5-99,Read2,CongenitalHeartProblem
+P50,Read2,CongenitalHeartProblem
+P50-1,Read2,CongenitalHeartProblem
+P50-2,Read2,CongenitalHeartProblem
+P501,Read2,CongenitalHeartProblem
+P501-1,Read2,CongenitalHeartProblem
+P501-2,Read2,CongenitalHeartProblem
+P50Z,Read2,CongenitalHeartProblem
+P51,Read2,CongenitalHeartProblem
+P511,Read2,CongenitalHeartProblem
+P5110,Read2,CongenitalHeartProblem
+P5111,Read2,CongenitalHeartProblem
+P5112,Read2,CongenitalHeartProblem
+P5113,Read2,CongenitalHeartProblem
+P511Z,Read2,CongenitalHeartProblem
+P512,Read2,CongenitalHeartProblem
+P51Y,Read2,CongenitalHeartProblem
+P51Y-1,Read2,CongenitalHeartProblem
+P51Z,Read2,CongenitalHeartProblem
+P51Z-1,Read2,CongenitalHeartProblem
+P52,Read2,CongenitalHeartProblem
+P52-99,Read2,CongenitalHeartProblem
+P520,Read2,CongenitalHeartProblem
+P520-1,Read2,CongenitalHeartProblem
+P520-2,Read2,CongenitalHeartProblem
+P521,Read2,CongenitalHeartProblem
+P52Z,Read2,CongenitalHeartProblem
+P54,Read2,CongenitalHeartProblem
+P540,Read2,CongenitalHeartProblem
+P541,Read2,CongenitalHeartProblem
+P543,Read2,CongenitalHeartProblem
+P544,Read2,CongenitalHeartProblem
+P545,Read2,CongenitalHeartProblem
+P54Y,Read2,CongenitalHeartProblem
+P54Z,Read2,CongenitalHeartProblem
+P55,Read2,CongenitalHeartProblem
+P550,Read2,CongenitalHeartProblem
+P550-1,Read2,CongenitalHeartProblem
+P550-2,Read2,CongenitalHeartProblem
+P550-3,Read2,CongenitalHeartProblem
+P551,Read2,CongenitalHeartProblem
+P552,Read2,CongenitalHeartProblem
+P552-1,Read2,CongenitalHeartProblem
+P553,Read2,CongenitalHeartProblem
+P55Y,Read2,CongenitalHeartProblem
+P55Y-1,Read2,CongenitalHeartProblem
+P55Z,Read2,CongenitalHeartProblem
+P56,Read2,CongenitalHeartProblem
+P560,Read2,CongenitalHeartProblem
+P561,Read2,CongenitalHeartProblem
+P561-1,Read2,CongenitalHeartProblem
+P561-2,Read2,CongenitalHeartProblem
+P56Y,Read2,CongenitalHeartProblem
+P56Z,Read2,CongenitalHeartProblem
+P56Z2,Read2,CongenitalHeartProblem
+P56ZZ,Read2,CongenitalHeartProblem
+P57,Read2,CongenitalHeartProblem
+P58,Read2,CongenitalHeartProblem
+P59,Read2,CongenitalHeartProblem
+P5Y,Read2,CongenitalHeartProblem
+P5Z,Read2,CongenitalHeartProblem
+P6,Read2,CongenitalHeartProblem
+P60,Read2,CongenitalHeartProblem
+P600,Read2,CongenitalHeartProblem
+P601,Read2,CongenitalHeartProblem
+P601-99,Read2,CongenitalHeartProblem
+P6010,Read2,CongenitalHeartProblem
+P601Z,Read2,CongenitalHeartProblem
+P602,Read2,CongenitalHeartProblem
+P6020,Read2,CongenitalHeartProblem
+P6021,Read2,CongenitalHeartProblem
+P602Z,Read2,CongenitalHeartProblem
+P603,Read2,CongenitalHeartProblem
+P603-1,Read2,CongenitalHeartProblem
+P60Z,Read2,CongenitalHeartProblem
+P60Z0,Read2,CongenitalHeartProblem
+P60Z1,Read2,CongenitalHeartProblem
+P60Z2,Read2,CongenitalHeartProblem
+P60ZZ,Read2,CongenitalHeartProblem
+P61,Read2,CongenitalHeartProblem
+P610,Read2,CongenitalHeartProblem
+P611,Read2,CongenitalHeartProblem
+P61Z,Read2,CongenitalHeartProblem
+P62,Read2,CongenitalHeartProblem
+P63,Read2,CongenitalHeartProblem
+P63-99,Read2,CongenitalHeartProblem
+P64,Read2,CongenitalHeartProblem
+P640,Read2,CongenitalHeartProblem
+P641,Read2,CongenitalHeartProblem
+P641-99,Read2,CongenitalHeartProblem
+P64Z,Read2,CongenitalHeartProblem
+P65,Read2,CongenitalHeartProblem
+P65-1,Read2,CongenitalHeartProblem
+P650,Read2,CongenitalHeartProblem
+P651,Read2,CongenitalHeartProblem
+P652,Read2,CongenitalHeartProblem
+P653,Read2,CongenitalHeartProblem
+P65Z,Read2,CongenitalHeartProblem
+P66,Read2,CongenitalHeartProblem
+P67,Read2,CongenitalHeartProblem
+P68,Read2,CongenitalHeartProblem
+P69,Read2,CongenitalHeartProblem
+P6W,Read2,CongenitalHeartProblem
+P6X,Read2,CongenitalHeartProblem
+P6Y,Read2,CongenitalHeartProblem
+P6Y0,Read2,CongenitalHeartProblem
+P6Y1,Read2,CongenitalHeartProblem
+P6Y2,Read2,CongenitalHeartProblem
+P6Y3,Read2,CongenitalHeartProblem
+P6Y31,Read2,CongenitalHeartProblem
+P6Y3Z,Read2,CongenitalHeartProblem
+P6Y4,Read2,CongenitalHeartProblem
+P6Y40,Read2,CongenitalHeartProblem
+P6Y41,Read2,CongenitalHeartProblem
+P6Y42,Read2,CongenitalHeartProblem
+P6Y44,Read2,CongenitalHeartProblem
+P6Y44-1,Read2,CongenitalHeartProblem
+P6Y45,Read2,CongenitalHeartProblem
+P6Y46,Read2,CongenitalHeartProblem
+P6Y4Z,Read2,CongenitalHeartProblem
+P6Y6,Read2,CongenitalHeartProblem
+P6Y6-1,Read2,CongenitalHeartProblem
+P6Y60,Read2,CongenitalHeartProblem
+P6Y61,Read2,CongenitalHeartProblem
+P6Y61-1,Read2,CongenitalHeartProblem
+P6Y62,Read2,CongenitalHeartProblem
+P6Y63,Read2,CongenitalHeartProblem
+P6Y64,Read2,CongenitalHeartProblem
+P6Y6Z,Read2,CongenitalHeartProblem
+P6Y8,Read2,CongenitalHeartProblem
+P6YY,Read2,CongenitalHeartProblem
+P6YY-1,Read2,CongenitalHeartProblem
+P6YY-2,Read2,CongenitalHeartProblem
+P6YY-3,Read2,CongenitalHeartProblem
+P6YY0,Read2,CongenitalHeartProblem
+P6YY1,Read2,CongenitalHeartProblem
+P6YY2,Read2,CongenitalHeartProblem
+P6YY3,Read2,CongenitalHeartProblem
+P6YY4-1,Read2,CongenitalHeartProblem
+P6YY5,Read2,CongenitalHeartProblem
+P6YY6,Read2,CongenitalHeartProblem
+P6YY7,Read2,CongenitalHeartProblem
+P6YY8,Read2,CongenitalHeartProblem
+P6YY9,Read2,CongenitalHeartProblem
+P6YYA,Read2,CongenitalHeartProblem
+P6YYB,Read2,CongenitalHeartProblem
+P6YYD,Read2,CongenitalHeartProblem
+P6YYD-1,Read2,CongenitalHeartProblem
+P6YYZ,Read2,CongenitalHeartProblem
+P6Z,Read2,CongenitalHeartProblem
+P6Z0,Read2,CongenitalHeartProblem
+P6Z1,Read2,CongenitalHeartProblem
+P6Z10,Read2,CongenitalHeartProblem
+P6Z11,Read2,CongenitalHeartProblem
+P6Z1Z,Read2,CongenitalHeartProblem
+P6Z2,Read2,CongenitalHeartProblem
+P6Z3,Read2,CongenitalHeartProblem
+P6ZZ,Read2,CongenitalHeartProblem
+P71,Read2,CongenitalHeartProblem
+P710,Read2,CongenitalHeartProblem
+P711,Read2,CongenitalHeartProblem
+P711-1,Read2,CongenitalHeartProblem
+P711-2,Read2,CongenitalHeartProblem
+P711-3,Read2,CongenitalHeartProblem
+P712,Read2,CongenitalHeartProblem
+P712-1,Read2,CongenitalHeartProblem
+P712-2,Read2,CongenitalHeartProblem
+P712-3,Read2,CongenitalHeartProblem
+P713,Read2,CongenitalHeartProblem
+P713-1,Read2,CongenitalHeartProblem
+P71Z,Read2,CongenitalHeartProblem
+P72,Read2,CongenitalHeartProblem
+P72-1,Read2,CongenitalHeartProblem
+P720,Read2,CongenitalHeartProblem
+P7210,Read2,CongenitalHeartProblem
+P7211,Read2,CongenitalHeartProblem
+P7211-1,Read2,CongenitalHeartProblem
+P7212,Read2,CongenitalHeartProblem
+P7212-1,Read2,CongenitalHeartProblem
+P7213,Read2,CongenitalHeartProblem
+P7214,Read2,CongenitalHeartProblem
+P7215,Read2,CongenitalHeartProblem
+P7216,Read2,CongenitalHeartProblem
+P7217,Read2,CongenitalHeartProblem
+P721Z,Read2,CongenitalHeartProblem
+P722,Read2,CongenitalHeartProblem
+P7220,Read2,CongenitalHeartProblem
+P7221,Read2,CongenitalHeartProblem
+P7222,Read2,CongenitalHeartProblem
+P7222-1,Read2,CongenitalHeartProblem
+P7224,Read2,CongenitalHeartProblem
+P7224-1,Read2,CongenitalHeartProblem
+P7225,Read2,CongenitalHeartProblem
+P722Z,Read2,CongenitalHeartProblem
+P72Z,Read2,CongenitalHeartProblem
+P72Z0,Read2,CongenitalHeartProblem
+P72Z1,Read2,CongenitalHeartProblem
+P72Z1-1,Read2,CongenitalHeartProblem
+P72ZZ,Read2,CongenitalHeartProblem
+P73,Read2,CongenitalHeartProblem
+P730,Read2,CongenitalHeartProblem
+P731,Read2,CongenitalHeartProblem
+P731-1,Read2,CongenitalHeartProblem
+P732,Read2,CongenitalHeartProblem
+P733,Read2,CongenitalHeartProblem
+P734,Read2,CongenitalHeartProblem
+P735,Read2,CongenitalHeartProblem
+P735-1,Read2,CongenitalHeartProblem
+P738,Read2,CongenitalHeartProblem
+P73Y,Read2,CongenitalHeartProblem
+P73Z,Read2,CongenitalHeartProblem
+P74,Read2,CongenitalHeartProblem
+P740,Read2,CongenitalHeartProblem
+P7400,Read2,CongenitalHeartProblem
+P7401,Read2,CongenitalHeartProblem
+P740Z,Read2,CongenitalHeartProblem
+P741,Read2,CongenitalHeartProblem
+P7410,Read2,CongenitalHeartProblem
+P7411,Read2,CongenitalHeartProblem
+P741Z,Read2,CongenitalHeartProblem
+P742,Read2,CongenitalHeartProblem
+P742-1,Read2,CongenitalHeartProblem
+P74Z,Read2,CongenitalHeartProblem
+P74Z-1,Read2,CongenitalHeartProblem
+P74Z0,Read2,CongenitalHeartProblem
+P74Z1,Read2,CongenitalHeartProblem
+P74Z2,Read2,CongenitalHeartProblem
+P74Z3,Read2,CongenitalHeartProblem
+P74Z4,Read2,CongenitalHeartProblem
+P74Z7,Read2,CongenitalHeartProblem
+P74Z8,Read2,CongenitalHeartProblem
+P74ZZ,Read2,CongenitalHeartProblem
+P7X,Read2,CongenitalHeartProblem
+P861,Read2,CysticFibrosisBronchiectasisAlveolitis
+PCNQAI2,Read2,HivOrAids
+PCNQNO16,Read2,HivOrAids
+PH3YA,Read2,SevereCombinedImmunodeficiencySyndromeViaBool
+PJ,Read2,LearningDisabilityOrDownsSyndrome
+PJ0,Read2,LearningDisabilityOrDownsSyndrome
+PJ0-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ0-2,Read2,LearningDisabilityOrDownsSyndrome
+PJ0-98,Read2,LearningDisabilityOrDownsSyndrome
+PJ00,Read2,LearningDisabilityOrDownsSyndrome
+PJ01,Read2,LearningDisabilityOrDownsSyndrome
+PJ01-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ02,Read2,LearningDisabilityOrDownsSyndrome
+PJ02-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ0Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ0Z-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ1,Read2,LearningDisabilityOrDownsSyndrome
+PJ10,Read2,LearningDisabilityOrDownsSyndrome
+PJ11,Read2,LearningDisabilityOrDownsSyndrome
+PJ11-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ12,Read2,LearningDisabilityOrDownsSyndrome
+PJ12-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ1Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ1Z-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ2,Read2,LearningDisabilityOrDownsSyndrome
+PJ20,Read2,LearningDisabilityOrDownsSyndrome
+PJ21,Read2,LearningDisabilityOrDownsSyndrome
+PJ21-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ22,Read2,LearningDisabilityOrDownsSyndrome
+PJ22-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ2Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ2Z-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ3,Read2,LearningDisabilityOrDownsSyndrome
+PJ30,Read2,LearningDisabilityOrDownsSyndrome
+PJ30-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ31,Read2,LearningDisabilityOrDownsSyndrome
+PJ31-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ32,Read2,LearningDisabilityOrDownsSyndrome
+PJ32-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ33,Read2,LearningDisabilityOrDownsSyndrome
+PJ330,Read2,LearningDisabilityOrDownsSyndrome
+PJ331,Read2,LearningDisabilityOrDownsSyndrome
+PJ331-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ332,Read2,LearningDisabilityOrDownsSyndrome
+PJ332-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ333,Read2,LearningDisabilityOrDownsSyndrome
+PJ33Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ34,Read2,LearningDisabilityOrDownsSyndrome
+PJ35,Read2,LearningDisabilityOrDownsSyndrome
+PJ36,Read2,LearningDisabilityOrDownsSyndrome
+PJ37,Read2,LearningDisabilityOrDownsSyndrome
+PJ37-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ37-2,Read2,LearningDisabilityOrDownsSyndrome
+PJ370,Read2,LearningDisabilityOrDownsSyndrome
+PJ37Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ38,Read2,LearningDisabilityOrDownsSyndrome
+PJ38-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ38-2,Read2,LearningDisabilityOrDownsSyndrome
+PJ3Y,Read2,LearningDisabilityOrDownsSyndrome
+PJ3Y0,Read2,LearningDisabilityOrDownsSyndrome
+PJ3Y0-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ3Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ4,Read2,LearningDisabilityOrDownsSyndrome
+PJ5,Read2,LearningDisabilityOrDownsSyndrome
+PJ50,Read2,LearningDisabilityOrDownsSyndrome
+PJ500,Read2,LearningDisabilityOrDownsSyndrome
+PJ501,Read2,LearningDisabilityOrDownsSyndrome
+PJ502,Read2,LearningDisabilityOrDownsSyndrome
+PJ503,Read2,LearningDisabilityOrDownsSyndrome
+PJ504,Read2,LearningDisabilityOrDownsSyndrome
+PJ505,Read2,LearningDisabilityOrDownsSyndrome
+PJ506,Read2,LearningDisabilityOrDownsSyndrome
+PJ507,Read2,LearningDisabilityOrDownsSyndrome
+PJ508,Read2,LearningDisabilityOrDownsSyndrome
+PJ50W,Read2,LearningDisabilityOrDownsSyndrome
+PJ50X,Read2,LearningDisabilityOrDownsSyndrome
+PJ50X-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ50Y,Read2,LearningDisabilityOrDownsSyndrome
+PJ50Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ51,Read2,LearningDisabilityOrDownsSyndrome
+PJ510,Read2,LearningDisabilityOrDownsSyndrome
+PJ511,Read2,LearningDisabilityOrDownsSyndrome
+PJ51Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ52,Read2,LearningDisabilityOrDownsSyndrome
+PJ520,Read2,LearningDisabilityOrDownsSyndrome
+PJ521,Read2,LearningDisabilityOrDownsSyndrome
+PJ522,Read2,LearningDisabilityOrDownsSyndrome
+PJ523,Read2,LearningDisabilityOrDownsSyndrome
+PJ524,Read2,LearningDisabilityOrDownsSyndrome
+PJ52Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ53,Read2,LearningDisabilityOrDownsSyndrome
+PJ53-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ530,Read2,LearningDisabilityOrDownsSyndrome
+PJ531,Read2,LearningDisabilityOrDownsSyndrome
+PJ532,Read2,LearningDisabilityOrDownsSyndrome
+PJ533,Read2,LearningDisabilityOrDownsSyndrome
+PJ534,Read2,LearningDisabilityOrDownsSyndrome
+PJ53Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ5Y,Read2,LearningDisabilityOrDownsSyndrome
+PJ5Y-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ5Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ5Z-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ63,Read2,LearningDisabilityOrDownsSyndrome
+PJ630,Read2,LearningDisabilityOrDownsSyndrome
+PJ631,Read2,LearningDisabilityOrDownsSyndrome
+PJ632,Read2,LearningDisabilityOrDownsSyndrome
+PJ633,Read2,LearningDisabilityOrDownsSyndrome
+PJ634,Read2,LearningDisabilityOrDownsSyndrome
+PJ635,Read2,LearningDisabilityOrDownsSyndrome
+PJ636,Read2,LearningDisabilityOrDownsSyndrome
+PJ636-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ636-2,Read2,LearningDisabilityOrDownsSyndrome
+PJ63Z,Read2,LearningDisabilityOrDownsSyndrome
+PJ7,Read2,LearningDisabilityOrDownsSyndrome
+PJ70,Read2,LearningDisabilityOrDownsSyndrome
+PJ71,Read2,LearningDisabilityOrDownsSyndrome
+PJ71-1,Read2,LearningDisabilityOrDownsSyndrome
+PJ71-2,Read2,LearningDisabilityOrDownsSyndrome
+PJ72,Read2,LearningDisabilityOrDownsSyndrome
+PJ73,Read2,LearningDisabilityOrDownsSyndrome
+PJ74,Read2,LearningDisabilityOrDownsSyndrome
+PJ7Z,Read2,LearningDisabilityOrDownsSyndrome
+PJY0,Read2,LearningDisabilityOrDownsSyndrome
+PJY1,Read2,LearningDisabilityOrDownsSyndrome
+PJY10,Read2,LearningDisabilityOrDownsSyndrome
+PJY11,Read2,LearningDisabilityOrDownsSyndrome
+PJY12,Read2,LearningDisabilityOrDownsSyndrome
+PJY13,Read2,LearningDisabilityOrDownsSyndrome
+PJY1Z,Read2,LearningDisabilityOrDownsSyndrome
+PJY2,Read2,LearningDisabilityOrDownsSyndrome
+PJY2-1,Read2,LearningDisabilityOrDownsSyndrome
+PJY3,Read2,LearningDisabilityOrDownsSyndrome
+PJY4,Read2,LearningDisabilityOrDownsSyndrome
+PJY5,Read2,LearningDisabilityOrDownsSyndrome
+PJY6,Read2,LearningDisabilityOrDownsSyndrome
+PJYY,Read2,LearningDisabilityOrDownsSyndrome
+PJYY-1,Read2,LearningDisabilityOrDownsSyndrome
+PJYY0,Read2,LearningDisabilityOrDownsSyndrome
+PJYY1,Read2,LearningDisabilityOrDownsSyndrome
+PJYY2,Read2,LearningDisabilityOrDownsSyndrome
+PJYY3,Read2,LearningDisabilityOrDownsSyndrome
+PJYYZ,Read2,LearningDisabilityOrDownsSyndrome
+PJYZ,Read2,LearningDisabilityOrDownsSyndrome
+PJZ,Read2,LearningDisabilityOrDownsSyndrome
+PJZ0,Read2,LearningDisabilityOrDownsSyndrome
+PJZ1,Read2,LearningDisabilityOrDownsSyndrome
+PJZ2,Read2,LearningDisabilityOrDownsSyndrome
+PJZ3,Read2,LearningDisabilityOrDownsSyndrome
+PJZZ,Read2,LearningDisabilityOrDownsSyndrome
+PK34,Read2,CongenitalHeartProblem
+PKY71,Read2,CongenitalHeartProblem
+PKYG,Read2,CongenitalHeartProblem
+PKYG-1,Read2,CongenitalHeartProblem
+PKYZ1,Read2,CongenitalHeartProblem
+PYU20,Read2,CongenitalHeartProblem
+PYU21,Read2,CongenitalHeartProblem
+PYU22,Read2,CongenitalHeartProblem
+PYU23,Read2,CongenitalHeartProblem
+PYU24,Read2,CongenitalHeartProblem
+PYU25,Read2,CongenitalHeartProblem
+PYU26,Read2,CongenitalHeartProblem
+PYU27,Read2,CongenitalHeartProblem
+PYU28,Read2,CongenitalHeartProblem
+PYU29,Read2,CongenitalHeartProblem
+PYU2G,Read2,CongenitalHeartProblem
+PYU2H,Read2,CongenitalHeartProblem
+PYU2J,Read2,CongenitalHeartProblem
+Q3171,Read2,PulmonaryHypertensionOrFibrosis
+Q48Y1,Read2,CongenitalHeartProblem
+Q494,Read2,CongenitalHeartProblem
+R034Y-1,Read2,LearningDisabilityOrDownsSyndrome
+R109,Read2,HivOrAids
+S102,Read2,PriorFractureOfHipWristSpineHumerus
+S1020,Read2,PriorFractureOfHipWristSpineHumerus
+S1021,Read2,PriorFractureOfHipWristSpineHumerus
+S1022,Read2,PriorFractureOfHipWristSpineHumerus
+S1023,Read2,PriorFractureOfHipWristSpineHumerus
+S1024,Read2,PriorFractureOfHipWristSpineHumerus
+S1025,Read2,PriorFractureOfHipWristSpineHumerus
+S1026,Read2,PriorFractureOfHipWristSpineHumerus
+S102Y,Read2,PriorFractureOfHipWristSpineHumerus
+S102Z,Read2,PriorFractureOfHipWristSpineHumerus
+S104,Read2,PriorFractureOfHipWristSpineHumerus
+S1040,Read2,PriorFractureOfHipWristSpineHumerus
+S1041,Read2,PriorFractureOfHipWristSpineHumerus
+S1042,Read2,PriorFractureOfHipWristSpineHumerus
+S1043,Read2,PriorFractureOfHipWristSpineHumerus
+S1044,Read2,PriorFractureOfHipWristSpineHumerus
+S1045,Read2,PriorFractureOfHipWristSpineHumerus
+S1046,Read2,PriorFractureOfHipWristSpineHumerus
+S106,Read2,PriorFractureOfHipWristSpineHumerus
+S1060,Read2,PriorFractureOfHipWristSpineHumerus
+S1061,Read2,PriorFractureOfHipWristSpineHumerus
+S10B0,Read2,PriorFractureOfHipWristSpineHumerus
+S10B1,Read2,PriorFractureOfHipWristSpineHumerus
+S10B2,Read2,PriorFractureOfHipWristSpineHumerus
+S10B6,Read2,PriorFractureOfHipWristSpineHumerus
+S10X,Read2,PriorFractureOfHipWristSpineHumerus
+S10Z,Read2,PriorFractureOfHipWristSpineHumerus
+S15,Read2,PriorFractureOfHipWristSpineHumerus
+S150,Read2,PriorFractureOfHipWristSpineHumerus
+S1500,Read2,PriorFractureOfHipWristSpineHumerus
+S220,Read2,PriorFractureOfHipWristSpineHumerus
+S2201,Read2,PriorFractureOfHipWristSpineHumerus
+S2202,Read2,PriorFractureOfHipWristSpineHumerus
+S2203,Read2,PriorFractureOfHipWristSpineHumerus
+S2204,Read2,PriorFractureOfHipWristSpineHumerus
+S2205,Read2,PriorFractureOfHipWristSpineHumerus
+S2206,Read2,PriorFractureOfHipWristSpineHumerus
+S2207,Read2,PriorFractureOfHipWristSpineHumerus
+S220Z,Read2,PriorFractureOfHipWristSpineHumerus
+S226,Read2,PriorFractureOfHipWristSpineHumerus
+S234,Read2,PriorFractureOfHipWristSpineHumerus
+S234-1,Read2,PriorFractureOfHipWristSpineHumerus
+S2340,Read2,PriorFractureOfHipWristSpineHumerus
+S2341,Read2,PriorFractureOfHipWristSpineHumerus
+S2341-1,Read2,PriorFractureOfHipWristSpineHumerus
+S2341-98,Read2,PriorFractureOfHipWristSpineHumerus
+S2341-99,Read2,PriorFractureOfHipWristSpineHumerus
+S2342,Read2,PriorFractureOfHipWristSpineHumerus
+S2343,Read2,PriorFractureOfHipWristSpineHumerus
+S2344,Read2,PriorFractureOfHipWristSpineHumerus
+S2345,Read2,PriorFractureOfHipWristSpineHumerus
+S2345-99,Read2,PriorFractureOfHipWristSpineHumerus
+S2346,Read2,PriorFractureOfHipWristSpineHumerus
+S2347,Read2,PriorFractureOfHipWristSpineHumerus
+S2351,Read2,PriorFractureOfHipWristSpineHumerus
+S30,Read2,PriorFractureOfHipWristSpineHumerus
+S30-1,Read2,PriorFractureOfHipWristSpineHumerus
+S300,Read2,PriorFractureOfHipWristSpineHumerus
+S3000,Read2,PriorFractureOfHipWristSpineHumerus
+S3001,Read2,PriorFractureOfHipWristSpineHumerus
+S3002,Read2,PriorFractureOfHipWristSpineHumerus
+S3003,Read2,PriorFractureOfHipWristSpineHumerus
+S3003-1,Read2,PriorFractureOfHipWristSpineHumerus
+S3004,Read2,PriorFractureOfHipWristSpineHumerus
+S3005,Read2,PriorFractureOfHipWristSpineHumerus
+S3006,Read2,PriorFractureOfHipWristSpineHumerus
+S3007,Read2,PriorFractureOfHipWristSpineHumerus
+S3008,Read2,PriorFractureOfHipWristSpineHumerus
+S3009,Read2,PriorFractureOfHipWristSpineHumerus
+S300A,Read2,PriorFractureOfHipWristSpineHumerus
+S300Y,Read2,PriorFractureOfHipWristSpineHumerus
+S300Y-1,Read2,PriorFractureOfHipWristSpineHumerus
+S300Z,Read2,PriorFractureOfHipWristSpineHumerus
+S301,Read2,PriorFractureOfHipWristSpineHumerus
+S3010,Read2,PriorFractureOfHipWristSpineHumerus
+S3011,Read2,PriorFractureOfHipWristSpineHumerus
+S3012,Read2,PriorFractureOfHipWristSpineHumerus
+S3013,Read2,PriorFractureOfHipWristSpineHumerus
+S3013-1,Read2,PriorFractureOfHipWristSpineHumerus
+S3014,Read2,PriorFractureOfHipWristSpineHumerus
+S3015,Read2,PriorFractureOfHipWristSpineHumerus
+S3016,Read2,PriorFractureOfHipWristSpineHumerus
+S3017,Read2,PriorFractureOfHipWristSpineHumerus
+S3018,Read2,PriorFractureOfHipWristSpineHumerus
+S3019,Read2,PriorFractureOfHipWristSpineHumerus
+S301A,Read2,PriorFractureOfHipWristSpineHumerus
+S301Y,Read2,PriorFractureOfHipWristSpineHumerus
+S301Y-1,Read2,PriorFractureOfHipWristSpineHumerus
+S301Z,Read2,PriorFractureOfHipWristSpineHumerus
+S302,Read2,PriorFractureOfHipWristSpineHumerus
+S3020,Read2,PriorFractureOfHipWristSpineHumerus
+S3020-1,Read2,PriorFractureOfHipWristSpineHumerus
+S3020-2,Read2,PriorFractureOfHipWristSpineHumerus
+S3021,Read2,PriorFractureOfHipWristSpineHumerus
+S3022,Read2,PriorFractureOfHipWristSpineHumerus
+S3023,Read2,PriorFractureOfHipWristSpineHumerus
+S3024,Read2,PriorFractureOfHipWristSpineHumerus
+S302Z,Read2,PriorFractureOfHipWristSpineHumerus
+S303,Read2,PriorFractureOfHipWristSpineHumerus
+S3030,Read2,PriorFractureOfHipWristSpineHumerus
+S3030-1,Read2,PriorFractureOfHipWristSpineHumerus
+S3030-2,Read2,PriorFractureOfHipWristSpineHumerus
+S3031,Read2,PriorFractureOfHipWristSpineHumerus
+S3032,Read2,PriorFractureOfHipWristSpineHumerus
+S3033,Read2,PriorFractureOfHipWristSpineHumerus
+S3034,Read2,PriorFractureOfHipWristSpineHumerus
+S303Z,Read2,PriorFractureOfHipWristSpineHumerus
+S304,Read2,PriorFractureOfHipWristSpineHumerus
+S305,Read2,PriorFractureOfHipWristSpineHumerus
+S30W,Read2,PriorFractureOfHipWristSpineHumerus
+S30X,Read2,PriorFractureOfHipWristSpineHumerus
+S30Y,Read2,PriorFractureOfHipWristSpineHumerus
+S30Y-1,Read2,PriorFractureOfHipWristSpineHumerus
+S30Z,Read2,PriorFractureOfHipWristSpineHumerus
+S4E,Read2,PriorFractureOfHipWristSpineHumerus
+S4E0,Read2,PriorFractureOfHipWristSpineHumerus
+S4E1,Read2,PriorFractureOfHipWristSpineHumerus
+S4E2,Read2,PriorFractureOfHipWristSpineHumerus
+S4E3,Read2,PriorFractureOfHipWristSpineHumerus
+SC200,Read2,Epilepsy
+SP122,Read2,ThrombosisOrPulmonaryEmbolus
+SP2Y1,Read2,CongenitalHeartProblem
+TRIQQOC1,Read2,Asthma
+ZV01A,Read2,HivOrAids
+ZV110,Read2,BipolarDiseaseOrSchizophrenia
+ZV111-1,Read2,BipolarDiseaseOrSchizophrenia
+ZV111-2,Read2,BipolarDiseaseOrSchizophrenia
+ZV12D,Read2,StrokeOrTia
+ZV400,Read2,LearningDisabilityOrDownsSyndrome
+ZV4A,Read2,LearningDisabilityOrDownsSyndrome
+ZV4AY,Read2,LearningDisabilityOrDownsSyndrome
+ZV623-1,Read2,LearningDisabilityOrDownsSyndrome
+ZV792,Read2,LearningDisabilityOrDownsSyndrome
+ZVU40,Read2,LearningDisabilityOrDownsSyndrome
+^ESCTPU365463,Read2,PulmonaryHypertensionOrFibrosis
+^ESCTRE845222,Read2,HousingCategory
+A613,OPCS,RadioTherapyInLast6Months
+B022,OPCS,RadioTherapyInLast6Months
+B17,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+B171,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+B178,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+B179,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+C242,OPCS,RadioTherapyInLast6Months
+C395,OPCS,RadioTherapyInLast6Months
+C455,OPCS,RadioTherapyInLast6Months
+C823,OPCS,RadioTherapyInLast6Months
+C824,OPCS,RadioTherapyInLast6Months
+E53,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+E531,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+E532,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+E533,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+E538,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+E539,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G26,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G261,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G268,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G269,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G68,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G681,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G688,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G689,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+G788,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J01,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J011,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J012,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J013,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J014,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J015,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J018,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J019,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J123,OPCS,RadioTherapyInLast6Months
+J487,OPCS,RadioTherapyInLast6Months
+J54,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J541,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J542,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J543,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J544,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J545,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J548,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J549,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+J721,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K01,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K011,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K012,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K018,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K019,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K02,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K021,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K022,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K023,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K024,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K025,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K026,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K028,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K029,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+K04,OPCS,CongenitalHeartProblem
+K041,OPCS,CongenitalHeartProblem
+K042,OPCS,CongenitalHeartProblem
+K043,OPCS,CongenitalHeartProblem
+K044,OPCS,CongenitalHeartProblem
+K045,OPCS,CongenitalHeartProblem
+K046,OPCS,CongenitalHeartProblem
+K048,OPCS,CongenitalHeartProblem
+K049,OPCS,CongenitalHeartProblem
+K05,OPCS,CongenitalHeartProblem
+K051,OPCS,CongenitalHeartProblem
+K052,OPCS,CongenitalHeartProblem
+K058,OPCS,CongenitalHeartProblem
+K059,OPCS,CongenitalHeartProblem
+K06,OPCS,CongenitalHeartProblem
+K061,OPCS,CongenitalHeartProblem
+K062,OPCS,CongenitalHeartProblem
+K063,OPCS,CongenitalHeartProblem
+K064,OPCS,CongenitalHeartProblem
+K068,OPCS,CongenitalHeartProblem
+K069,OPCS,CongenitalHeartProblem
+K07,OPCS,CongenitalHeartProblem
+K071,OPCS,CongenitalHeartProblem
+K072,OPCS,CongenitalHeartProblem
+K073,OPCS,CongenitalHeartProblem
+K078,OPCS,CongenitalHeartProblem
+K079,OPCS,CongenitalHeartProblem
+K08,OPCS,CongenitalHeartProblem
+K081,OPCS,CongenitalHeartProblem
+K082,OPCS,CongenitalHeartProblem
+K083,OPCS,CongenitalHeartProblem
+K084,OPCS,CongenitalHeartProblem
+K088,OPCS,CongenitalHeartProblem
+K089,OPCS,CongenitalHeartProblem
+K09,OPCS,CongenitalHeartProblem
+K091,OPCS,CongenitalHeartProblem
+K092,OPCS,CongenitalHeartProblem
+K093,OPCS,CongenitalHeartProblem
+K094,OPCS,CongenitalHeartProblem
+K095,OPCS,CongenitalHeartProblem
+K096,OPCS,CongenitalHeartProblem
+K098,OPCS,CongenitalHeartProblem
+K099,OPCS,CongenitalHeartProblem
+K10,OPCS,CongenitalHeartProblem
+K101,OPCS,CongenitalHeartProblem
+K102,OPCS,CongenitalHeartProblem
+K103,OPCS,CongenitalHeartProblem
+K104,OPCS,CongenitalHeartProblem
+K105,OPCS,CongenitalHeartProblem
+K108,OPCS,CongenitalHeartProblem
+K109,OPCS,CongenitalHeartProblem
+K11,OPCS,CongenitalHeartProblem
+K111,OPCS,CongenitalHeartProblem
+K112,OPCS,CongenitalHeartProblem
+K113,OPCS,CongenitalHeartProblem
+K114,OPCS,CongenitalHeartProblem
+K115,OPCS,CongenitalHeartProblem
+K116,OPCS,CongenitalHeartProblem
+K117,OPCS,CongenitalHeartProblem
+K118,OPCS,CongenitalHeartProblem
+K119,OPCS,CongenitalHeartProblem
+K12,OPCS,CongenitalHeartProblem
+K121,OPCS,CongenitalHeartProblem
+K122,OPCS,CongenitalHeartProblem
+K123,OPCS,CongenitalHeartProblem
+K124,OPCS,CongenitalHeartProblem
+K125,OPCS,CongenitalHeartProblem
+K128,OPCS,CongenitalHeartProblem
+K129,OPCS,CongenitalHeartProblem
+K131,OPCS,CongenitalHeartProblem
+K132,OPCS,CongenitalHeartProblem
+K133,OPCS,CongenitalHeartProblem
+K134,OPCS,CongenitalHeartProblem
+K135,OPCS,CongenitalHeartProblem
+K138,OPCS,CongenitalHeartProblem
+K139,OPCS,CongenitalHeartProblem
+K163,OPCS,CongenitalHeartProblem
+K17,OPCS,CongenitalHeartProblem
+K171,OPCS,CongenitalHeartProblem
+K172,OPCS,CongenitalHeartProblem
+K173,OPCS,CongenitalHeartProblem
+K174,OPCS,CongenitalHeartProblem
+K175,OPCS,CongenitalHeartProblem
+K176,OPCS,CongenitalHeartProblem
+K177,OPCS,CongenitalHeartProblem
+K178,OPCS,CongenitalHeartProblem
+K179,OPCS,CongenitalHeartProblem
+K18,OPCS,CongenitalHeartProblem
+K181,OPCS,CongenitalHeartProblem
+K182,OPCS,CongenitalHeartProblem
+K183,OPCS,CongenitalHeartProblem
+K184,OPCS,CongenitalHeartProblem
+K185,OPCS,CongenitalHeartProblem
+K186,OPCS,CongenitalHeartProblem
+K187,OPCS,CongenitalHeartProblem
+K188,OPCS,CongenitalHeartProblem
+K189,OPCS,CongenitalHeartProblem
+K19,OPCS,CongenitalHeartProblem
+K191,OPCS,CongenitalHeartProblem
+K192,OPCS,CongenitalHeartProblem
+K193,OPCS,CongenitalHeartProblem
+K194,OPCS,CongenitalHeartProblem
+K195,OPCS,CongenitalHeartProblem
+K196,OPCS,CongenitalHeartProblem
+K198,OPCS,CongenitalHeartProblem
+K199,OPCS,CongenitalHeartProblem
+K20,OPCS,CongenitalHeartProblem
+K201,OPCS,CongenitalHeartProblem
+K202,OPCS,CongenitalHeartProblem
+K203,OPCS,CongenitalHeartProblem
+K204,OPCS,CongenitalHeartProblem
+K208,OPCS,CongenitalHeartProblem
+K209,OPCS,CongenitalHeartProblem
+K242,OPCS,CongenitalHeartProblem
+L01,OPCS,CongenitalHeartProblem
+L011,OPCS,CongenitalHeartProblem
+L012,OPCS,CongenitalHeartProblem
+L013,OPCS,CongenitalHeartProblem
+L014,OPCS,CongenitalHeartProblem
+L018,OPCS,CongenitalHeartProblem
+L019,OPCS,CongenitalHeartProblem
+L02,OPCS,CongenitalHeartProblem
+L021,OPCS,CongenitalHeartProblem
+L022,OPCS,CongenitalHeartProblem
+L023,OPCS,CongenitalHeartProblem
+L024,OPCS,CongenitalHeartProblem
+L028,OPCS,CongenitalHeartProblem
+L029,OPCS,CongenitalHeartProblem
+L03,OPCS,CongenitalHeartProblem
+L031,OPCS,CongenitalHeartProblem
+L032,OPCS,CongenitalHeartProblem
+L038,OPCS,CongenitalHeartProblem
+L039,OPCS,CongenitalHeartProblem
+L05,OPCS,CongenitalHeartProblem
+L051,OPCS,CongenitalHeartProblem
+L052,OPCS,CongenitalHeartProblem
+L053,OPCS,CongenitalHeartProblem
+L054,OPCS,CongenitalHeartProblem
+L058,OPCS,CongenitalHeartProblem
+L059,OPCS,CongenitalHeartProblem
+L06,OPCS,CongenitalHeartProblem
+L061,OPCS,CongenitalHeartProblem
+L062,OPCS,CongenitalHeartProblem
+L063,OPCS,CongenitalHeartProblem
+L064,OPCS,CongenitalHeartProblem
+L065,OPCS,CongenitalHeartProblem
+L066,OPCS,CongenitalHeartProblem
+L067,OPCS,CongenitalHeartProblem
+L068,OPCS,CongenitalHeartProblem
+L069,OPCS,CongenitalHeartProblem
+L07,OPCS,CongenitalHeartProblem
+L071,OPCS,CongenitalHeartProblem
+L072,OPCS,CongenitalHeartProblem
+L073,OPCS,CongenitalHeartProblem
+L074,OPCS,CongenitalHeartProblem
+L075,OPCS,CongenitalHeartProblem
+L078,OPCS,CongenitalHeartProblem
+L079,OPCS,CongenitalHeartProblem
+L08,OPCS,CongenitalHeartProblem
+L081,OPCS,CongenitalHeartProblem
+L082,OPCS,CongenitalHeartProblem
+L083,OPCS,CongenitalHeartProblem
+L084,OPCS,CongenitalHeartProblem
+L086,OPCS,CongenitalHeartProblem
+L087,OPCS,CongenitalHeartProblem
+L088,OPCS,CongenitalHeartProblem
+L089,OPCS,CongenitalHeartProblem
+M01,OPCS,ChronicKidneyDisease5Transplant
+M011,OPCS,ChronicKidneyDisease5Transplant
+M012,OPCS,ChronicKidneyDisease5Transplant
+M013,OPCS,ChronicKidneyDisease5Transplant
+M014,OPCS,ChronicKidneyDisease5Transplant
+M015,OPCS,ChronicKidneyDisease5Transplant
+M018,OPCS,ChronicKidneyDisease5Transplant
+M019,OPCS,ChronicKidneyDisease5Transplant
+M706,OPCS,RadioTherapyInLast6Months
+M712,OPCS,RadioTherapyInLast6Months
+O44,OPCS,RadioTherapyInLast6Months
+O441,OPCS,RadioTherapyInLast6Months
+O448,OPCS,RadioTherapyInLast6Months
+O449,OPCS,RadioTherapyInLast6Months
+P064,OPCS,RadioTherapyInLast6Months
+P205,OPCS,RadioTherapyInLast6Months
+Q151,OPCS,RadioTherapyInLast6Months
+T481,OPCS,RadioTherapyInLast6Months
+W34,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W341,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W342,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W343,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W344,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W345,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W346,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W348,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+W349,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+X334,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+X335,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+X336,OPCS,BoneMarrowTransplantInLast6Months/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+X401,OPCS,ChronicKidneyDisease5Dialysis
+X402,OPCS,ChronicKidneyDisease5Dialysis
+X403,OPCS,ChronicKidneyDisease5Dialysis
+X405,OPCS,ChronicKidneyDisease5Dialysis
+X406,OPCS,ChronicKidneyDisease5Dialysis
+X408,OPCS,ChronicKidneyDisease5
+X409,OPCS,ChronicKidneyDisease5
+X65,OPCS,RadioTherapyInLast6Months
+X651,OPCS,RadioTherapyInLast6Months
+X652,OPCS,RadioTherapyInLast6Months
+X653,OPCS,RadioTherapyInLast6Months
+X654,OPCS,RadioTherapyInLast6Months
+X655,OPCS,RadioTherapyInLast6Months
+X656,OPCS,RadioTherapyInLast6Months
+X657,OPCS,RadioTherapyInLast6Months
+X658,OPCS,RadioTherapyInLast6Months
+X659,OPCS,RadioTherapyInLast6Months
+Y012,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+Y014,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+Y015,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+Y016,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+Y018,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+Y019,OPCS,SolidOrganTransplant/SolidOrganTransplantOrBoneMarrowTransplantInLast6Months
+Y35,OPCS,RadioTherapyInLast6Months
+Y351,OPCS,RadioTherapyInLast6Months
+Y352,OPCS,RadioTherapyInLast6Months
+Y353,OPCS,RadioTherapyInLast6Months
+Y354,OPCS,RadioTherapyInLast6Months
+Y358,OPCS,RadioTherapyInLast6Months
+Y359,OPCS,RadioTherapyInLast6Months
+Y36,OPCS,RadioTherapyInLast6Months
+Y361,OPCS,RadioTherapyInLast6Months
+Y362,OPCS,RadioTherapyInLast6Months
+Y363,OPCS,RadioTherapyInLast6Months
+Y364,OPCS,RadioTherapyInLast6Months
+Y368,OPCS,RadioTherapyInLast6Months
+Y369,OPCS,RadioTherapyInLast6Months
+Y902,OPCS,RadioTherapyInLast6Months
+Y91,OPCS,RadioTherapyInLast6Months
+Y911,OPCS,RadioTherapyInLast6Months
+Y912,OPCS,RadioTherapyInLast6Months
+Y913,OPCS,RadioTherapyInLast6Months
+Y914,OPCS,RadioTherapyInLast6Months
+Y915,OPCS,RadioTherapyInLast6Months
+Y918,OPCS,RadioTherapyInLast6Months
+Y919,OPCS,RadioTherapyInLast6Months
+B20,ICD10,HivOrAids
+B200,ICD10,HivOrAids
+B201,ICD10,HivOrAids
+B202,ICD10,HivOrAids
+B203,ICD10,HivOrAids
+B204,ICD10,HivOrAids
+B205,ICD10,HivOrAids
+B206,ICD10,HivOrAids
+B207,ICD10,HivOrAids
+B208,ICD10,HivOrAids
+B209,ICD10,HivOrAids
+B21,ICD10,HivOrAids
+B210,ICD10,HivOrAids
+B211,ICD10,HivOrAids
+B212,ICD10,HivOrAids
+B213,ICD10,HivOrAids
+B217,ICD10,HivOrAids
+B218,ICD10,HivOrAids
+B219,ICD10,HivOrAids
+B22,ICD10,HivOrAids
+B220,ICD10,HivOrAids
+B221,ICD10,HivOrAids
+B222,ICD10,HivOrAids
+B227,ICD10,HivOrAids
+B23,ICD10,HivOrAids
+B230,ICD10,HivOrAids
+B231,ICD10,HivOrAids
+B232,ICD10,HivOrAids
+B238,ICD10,HivOrAids
+B24,ICD10,HivOrAids
+B24X,ICD10,HivOrAids
+C00,ICD10,LungOrOralCancer
+C000,ICD10,LungOrOralCancer
+C001,ICD10,LungOrOralCancer
+C002,ICD10,LungOrOralCancer
+C003,ICD10,LungOrOralCancer
+C004,ICD10,LungOrOralCancer
+C005,ICD10,LungOrOralCancer
+C006,ICD10,LungOrOralCancer
+C008,ICD10,LungOrOralCancer
+C009,ICD10,LungOrOralCancer
+C01,ICD10,LungOrOralCancer
+C01X,ICD10,LungOrOralCancer
+C02,ICD10,LungOrOralCancer
+C020,ICD10,LungOrOralCancer
+C021,ICD10,LungOrOralCancer
+C022,ICD10,LungOrOralCancer
+C023,ICD10,LungOrOralCancer
+C024,ICD10,LungOrOralCancer
+C028,ICD10,LungOrOralCancer
+C029,ICD10,LungOrOralCancer
+C03,ICD10,LungOrOralCancer
+C030,ICD10,LungOrOralCancer
+C031,ICD10,LungOrOralCancer
+C039,ICD10,LungOrOralCancer
+C04,ICD10,LungOrOralCancer
+C040,ICD10,LungOrOralCancer
+C041,ICD10,LungOrOralCancer
+C048,ICD10,LungOrOralCancer
+C049,ICD10,LungOrOralCancer
+C05,ICD10,LungOrOralCancer
+C050,ICD10,LungOrOralCancer
+C051,ICD10,LungOrOralCancer
+C052,ICD10,LungOrOralCancer
+C058,ICD10,LungOrOralCancer
+C059,ICD10,LungOrOralCancer
+C06,ICD10,LungOrOralCancer
+C060,ICD10,LungOrOralCancer
+C061,ICD10,LungOrOralCancer
+C062,ICD10,LungOrOralCancer
+C068,ICD10,LungOrOralCancer
+C069,ICD10,LungOrOralCancer
+C07,ICD10,LungOrOralCancer
+C07X,ICD10,LungOrOralCancer
+C08,ICD10,LungOrOralCancer
+C09,ICD10,LungOrOralCancer
+C090,ICD10,LungOrOralCancer
+C091,ICD10,LungOrOralCancer
+C098,ICD10,LungOrOralCancer
+C099,ICD10,LungOrOralCancer
+C10,ICD10,LungOrOralCancer
+C100,ICD10,LungOrOralCancer
+C101,ICD10,LungOrOralCancer
+C102,ICD10,LungOrOralCancer
+C103,ICD10,LungOrOralCancer
+C104,ICD10,LungOrOralCancer
+C108,ICD10,LungOrOralCancer
+C109,ICD10,LungOrOralCancer
+C11,ICD10,LungOrOralCancer
+C110,ICD10,LungOrOralCancer
+C111,ICD10,LungOrOralCancer
+C112,ICD10,LungOrOralCancer
+C113,ICD10,LungOrOralCancer
+C118,ICD10,LungOrOralCancer
+C119,ICD10,LungOrOralCancer
+C12,ICD10,LungOrOralCancer
+C12X,ICD10,LungOrOralCancer
+C13,ICD10,LungOrOralCancer
+C130,ICD10,LungOrOralCancer
+C131,ICD10,LungOrOralCancer
+C132,ICD10,LungOrOralCancer
+C138,ICD10,LungOrOralCancer
+C139,ICD10,LungOrOralCancer
+C14,ICD10,LungOrOralCancer
+C140,ICD10,LungOrOralCancer
+C142,ICD10,LungOrOralCancer
+C148,ICD10,LungOrOralCancer
+C34,ICD10,LungOrOralCancer
+C340,ICD10,LungOrOralCancer
+C341,ICD10,LungOrOralCancer
+C342,ICD10,LungOrOralCancer
+C343,ICD10,LungOrOralCancer
+C348,ICD10,LungOrOralCancer
+C349,ICD10,LungOrOralCancer
+C81,ICD10,CancerOfBloodOrBoneMarrow
+C810,ICD10,CancerOfBloodOrBoneMarrow
+C811,ICD10,CancerOfBloodOrBoneMarrow
+C812,ICD10,CancerOfBloodOrBoneMarrow
+C813,ICD10,CancerOfBloodOrBoneMarrow
+C814,ICD10,CancerOfBloodOrBoneMarrow
+C817,ICD10,CancerOfBloodOrBoneMarrow
+C819,ICD10,CancerOfBloodOrBoneMarrow
+C82,ICD10,CancerOfBloodOrBoneMarrow
+C820,ICD10,CancerOfBloodOrBoneMarrow
+C821,ICD10,CancerOfBloodOrBoneMarrow
+C822,ICD10,CancerOfBloodOrBoneMarrow
+C823,ICD10,CancerOfBloodOrBoneMarrow
+C824,ICD10,CancerOfBloodOrBoneMarrow
+C825,ICD10,CancerOfBloodOrBoneMarrow
+C826,ICD10,CancerOfBloodOrBoneMarrow
+C827,ICD10,CancerOfBloodOrBoneMarrow
+C829,ICD10,CancerOfBloodOrBoneMarrow
+C83,ICD10,CancerOfBloodOrBoneMarrow
+C830,ICD10,CancerOfBloodOrBoneMarrow
+C831,ICD10,CancerOfBloodOrBoneMarrow
+C833,ICD10,CancerOfBloodOrBoneMarrow
+C835,ICD10,CancerOfBloodOrBoneMarrow
+C837,ICD10,CancerOfBloodOrBoneMarrow
+C838,ICD10,CancerOfBloodOrBoneMarrow
+C839,ICD10,CancerOfBloodOrBoneMarrow
+C84,ICD10,CancerOfBloodOrBoneMarrow
+C840,ICD10,CancerOfBloodOrBoneMarrow
+C841,ICD10,CancerOfBloodOrBoneMarrow
+C844,ICD10,CancerOfBloodOrBoneMarrow
+C845,ICD10,CancerOfBloodOrBoneMarrow
+C846,ICD10,CancerOfBloodOrBoneMarrow
+C847,ICD10,CancerOfBloodOrBoneMarrow
+C848,ICD10,CancerOfBloodOrBoneMarrow
+C849,ICD10,CancerOfBloodOrBoneMarrow
+C85,ICD10,CancerOfBloodOrBoneMarrow
+C851,ICD10,CancerOfBloodOrBoneMarrow
+C852,ICD10,CancerOfBloodOrBoneMarrow
+C857,ICD10,CancerOfBloodOrBoneMarrow
+C859,ICD10,CancerOfBloodOrBoneMarrow
+C86,ICD10,CancerOfBloodOrBoneMarrow
+C860,ICD10,CancerOfBloodOrBoneMarrow
+C861,ICD10,CancerOfBloodOrBoneMarrow
+C862,ICD10,CancerOfBloodOrBoneMarrow
+C863,ICD10,CancerOfBloodOrBoneMarrow
+C864,ICD10,CancerOfBloodOrBoneMarrow
+C865,ICD10,CancerOfBloodOrBoneMarrow
+C866,ICD10,CancerOfBloodOrBoneMarrow
+C88,ICD10,CancerOfBloodOrBoneMarrow
+C880,ICD10,CancerOfBloodOrBoneMarrow
+C882,ICD10,CancerOfBloodOrBoneMarrow
+C883,ICD10,CancerOfBloodOrBoneMarrow
+C884,ICD10,CancerOfBloodOrBoneMarrow
+C887,ICD10,CancerOfBloodOrBoneMarrow
+C889,ICD10,CancerOfBloodOrBoneMarrow
+C90,ICD10,CancerOfBloodOrBoneMarrow
+C900,ICD10,CancerOfBloodOrBoneMarrow
+C901,ICD10,CancerOfBloodOrBoneMarrow
+C902,ICD10,CancerOfBloodOrBoneMarrow
+C903,ICD10,CancerOfBloodOrBoneMarrow
+C91,ICD10,CancerOfBloodOrBoneMarrow
+C910,ICD10,CancerOfBloodOrBoneMarrow
+C911,ICD10,CancerOfBloodOrBoneMarrow
+C913,ICD10,CancerOfBloodOrBoneMarrow
+C914,ICD10,CancerOfBloodOrBoneMarrow
+C915,ICD10,CancerOfBloodOrBoneMarrow
+C916,ICD10,CancerOfBloodOrBoneMarrow
+C917,ICD10,CancerOfBloodOrBoneMarrow
+C918,ICD10,CancerOfBloodOrBoneMarrow
+C919,ICD10,CancerOfBloodOrBoneMarrow
+C92,ICD10,CancerOfBloodOrBoneMarrow
+C920,ICD10,CancerOfBloodOrBoneMarrow
+C921,ICD10,CancerOfBloodOrBoneMarrow
+C922,ICD10,CancerOfBloodOrBoneMarrow
+C923,ICD10,CancerOfBloodOrBoneMarrow
+C924,ICD10,CancerOfBloodOrBoneMarrow
+C925,ICD10,CancerOfBloodOrBoneMarrow
+C926,ICD10,CancerOfBloodOrBoneMarrow
+C927,ICD10,CancerOfBloodOrBoneMarrow
+C928,ICD10,CancerOfBloodOrBoneMarrow
+C929,ICD10,CancerOfBloodOrBoneMarrow
+C93,ICD10,CancerOfBloodOrBoneMarrow
+C930,ICD10,CancerOfBloodOrBoneMarrow
+C931,ICD10,CancerOfBloodOrBoneMarrow
+C933,ICD10,CancerOfBloodOrBoneMarrow
+C937,ICD10,CancerOfBloodOrBoneMarrow
+C939,ICD10,CancerOfBloodOrBoneMarrow
+C94,ICD10,CancerOfBloodOrBoneMarrow
+C940,ICD10,CancerOfBloodOrBoneMarrow
+C942,ICD10,CancerOfBloodOrBoneMarrow
+C943,ICD10,CancerOfBloodOrBoneMarrow
+C944,ICD10,CancerOfBloodOrBoneMarrow
+C946,ICD10,CancerOfBloodOrBoneMarrow
+C947,ICD10,CancerOfBloodOrBoneMarrow
+C95,ICD10,CancerOfBloodOrBoneMarrow
+C950,ICD10,CancerOfBloodOrBoneMarrow
+C951,ICD10,CancerOfBloodOrBoneMarrow
+C957,ICD10,CancerOfBloodOrBoneMarrow
+C959,ICD10,CancerOfBloodOrBoneMarrow
+C96,ICD10,CancerOfBloodOrBoneMarrow
+C960,ICD10,CancerOfBloodOrBoneMarrow
+C962,ICD10,CancerOfBloodOrBoneMarrow
+C964,ICD10,CancerOfBloodOrBoneMarrow
+C965,ICD10,CancerOfBloodOrBoneMarrow
+C966,ICD10,CancerOfBloodOrBoneMarrow
+C967,ICD10,CancerOfBloodOrBoneMarrow
+C968,ICD10,CancerOfBloodOrBoneMarrow
+C969,ICD10,CancerOfBloodOrBoneMarrow
+D57,ICD10,SickleCellViaBool
+D570,ICD10,SickleCellViaBool
+D571,ICD10,SickleCellViaBool
+D578,ICD10,SickleCellViaBool
+E10,ICD10,Diabetes
+E100,ICD10,Diabetes
+E101,ICD10,Diabetes
+E102,ICD10,Diabetes
+E103,ICD10,Diabetes
+E104,ICD10,Diabetes
+E105,ICD10,Diabetes
+E106,ICD10,Diabetes
+E107,ICD10,Diabetes
+E108,ICD10,Diabetes
+E109,ICD10,Diabetes
+E11,ICD10,Diabetes
+E110,ICD10,Diabetes
+E111,ICD10,Diabetes
+E112,ICD10,Diabetes
+E113,ICD10,Diabetes
+E114,ICD10,Diabetes
+E115,ICD10,Diabetes
+E116,ICD10,Diabetes
+E117,ICD10,Diabetes
+E118,ICD10,Diabetes
+E119,ICD10,Diabetes
+E12,ICD10,Diabetes
+E120,ICD10,Diabetes
+E121,ICD10,Diabetes
+E122,ICD10,Diabetes
+E123,ICD10,Diabetes
+E124,ICD10,Diabetes
+E125,ICD10,Diabetes
+E126,ICD10,Diabetes
+E127,ICD10,Diabetes
+E128,ICD10,Diabetes
+E129,ICD10,Diabetes
+E13,ICD10,Diabetes
+E130,ICD10,Diabetes
+E131,ICD10,Diabetes
+E132,ICD10,Diabetes
+E133,ICD10,Diabetes
+E134,ICD10,Diabetes
+E135,ICD10,Diabetes
+E136,ICD10,Diabetes
+E137,ICD10,Diabetes
+E138,ICD10,Diabetes
+E139,ICD10,Diabetes
+E14,ICD10,Diabetes
+E140,ICD10,Diabetes
+E141,ICD10,Diabetes
+E142,ICD10,Diabetes
+E143,ICD10,Diabetes
+E144,ICD10,Diabetes
+E145,ICD10,Diabetes
+E146,ICD10,Diabetes
+E147,ICD10,Diabetes
+E148,ICD10,Diabetes
+E149,ICD10,Diabetes
+E84,ICD10,CysticFibrosisBronchiectasisAlveolitis
+E840,ICD10,CysticFibrosisBronchiectasisAlveolitis
+E841,ICD10,CysticFibrosisBronchiectasisAlveolitis
+E848,ICD10,CysticFibrosisBronchiectasisAlveolitis
+E849,ICD10,CysticFibrosisBronchiectasisAlveolitis
+F00,ICD10,Dementia
+F000,ICD10,Dementia
+F001,ICD10,Dementia
+F002,ICD10,Dementia
+F009,ICD10,Dementia
+F01,ICD10,Dementia
+F010,ICD10,Dementia
+F011,ICD10,Dementia
+F012,ICD10,Dementia
+F013,ICD10,Dementia
+F018,ICD10,Dementia
+F019,ICD10,Dementia
+F02,ICD10,Dementia
+F020,ICD10,Dementia
+F021,ICD10,Dementia
+F022,ICD10,Dementia
+F022,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+F023,ICD10,Dementia
+F024,ICD10,Dementia
+F028,ICD10,Dementia
+F03,ICD10,Dementia
+F03X,ICD10,Dementia
+F051,ICD10,Dementia
+F20,ICD10,BipolarDiseaseOrSchizophrenia
+F200,ICD10,BipolarDiseaseOrSchizophrenia
+F201,ICD10,BipolarDiseaseOrSchizophrenia
+F202,ICD10,BipolarDiseaseOrSchizophrenia
+F203,ICD10,BipolarDiseaseOrSchizophrenia
+F204,ICD10,BipolarDiseaseOrSchizophrenia
+F205,ICD10,BipolarDiseaseOrSchizophrenia
+F206,ICD10,BipolarDiseaseOrSchizophrenia
+F208,ICD10,BipolarDiseaseOrSchizophrenia
+F209,ICD10,BipolarDiseaseOrSchizophrenia
+F21,ICD10,BipolarDiseaseOrSchizophrenia
+F21X,ICD10,BipolarDiseaseOrSchizophrenia
+F22,ICD10,BipolarDiseaseOrSchizophrenia
+F220,ICD10,BipolarDiseaseOrSchizophrenia
+F228,ICD10,BipolarDiseaseOrSchizophrenia
+F229,ICD10,BipolarDiseaseOrSchizophrenia
+F23,ICD10,BipolarDiseaseOrSchizophrenia
+F230,ICD10,BipolarDiseaseOrSchizophrenia
+F231,ICD10,BipolarDiseaseOrSchizophrenia
+F232,ICD10,BipolarDiseaseOrSchizophrenia
+F233,ICD10,BipolarDiseaseOrSchizophrenia
+F238,ICD10,BipolarDiseaseOrSchizophrenia
+F239,ICD10,BipolarDiseaseOrSchizophrenia
+F24,ICD10,BipolarDiseaseOrSchizophrenia
+F24X,ICD10,BipolarDiseaseOrSchizophrenia
+F25,ICD10,BipolarDiseaseOrSchizophrenia
+F250,ICD10,BipolarDiseaseOrSchizophrenia
+F251,ICD10,BipolarDiseaseOrSchizophrenia
+F252,ICD10,BipolarDiseaseOrSchizophrenia
+F258,ICD10,BipolarDiseaseOrSchizophrenia
+F259,ICD10,BipolarDiseaseOrSchizophrenia
+F28,ICD10,BipolarDiseaseOrSchizophrenia
+F28X,ICD10,BipolarDiseaseOrSchizophrenia
+F29,ICD10,BipolarDiseaseOrSchizophrenia
+F29X,ICD10,BipolarDiseaseOrSchizophrenia
+F30,ICD10,BipolarDiseaseOrSchizophrenia
+F300,ICD10,BipolarDiseaseOrSchizophrenia
+F301,ICD10,BipolarDiseaseOrSchizophrenia
+F302,ICD10,BipolarDiseaseOrSchizophrenia
+F308,ICD10,BipolarDiseaseOrSchizophrenia
+F309,ICD10,BipolarDiseaseOrSchizophrenia
+F31,ICD10,BipolarDiseaseOrSchizophrenia
+F310,ICD10,BipolarDiseaseOrSchizophrenia
+F311,ICD10,BipolarDiseaseOrSchizophrenia
+F312,ICD10,BipolarDiseaseOrSchizophrenia
+F313,ICD10,BipolarDiseaseOrSchizophrenia
+F314,ICD10,BipolarDiseaseOrSchizophrenia
+F315,ICD10,BipolarDiseaseOrSchizophrenia
+F316,ICD10,BipolarDiseaseOrSchizophrenia
+F317,ICD10,BipolarDiseaseOrSchizophrenia
+F318,ICD10,BipolarDiseaseOrSchizophrenia
+F319,ICD10,BipolarDiseaseOrSchizophrenia
+F70,ICD10,LearningDisabilityOrDownsSyndrome
+F700,ICD10,LearningDisabilityOrDownsSyndrome
+F701,ICD10,LearningDisabilityOrDownsSyndrome
+F708,ICD10,LearningDisabilityOrDownsSyndrome
+F709,ICD10,LearningDisabilityOrDownsSyndrome
+F71,ICD10,LearningDisabilityOrDownsSyndrome
+F710,ICD10,LearningDisabilityOrDownsSyndrome
+F711,ICD10,LearningDisabilityOrDownsSyndrome
+F718,ICD10,LearningDisabilityOrDownsSyndrome
+F719,ICD10,LearningDisabilityOrDownsSyndrome
+F72,ICD10,LearningDisabilityOrDownsSyndrome
+F720,ICD10,LearningDisabilityOrDownsSyndrome
+F721,ICD10,LearningDisabilityOrDownsSyndrome
+F728,ICD10,LearningDisabilityOrDownsSyndrome
+F729,ICD10,LearningDisabilityOrDownsSyndrome
+F73,ICD10,LearningDisabilityOrDownsSyndrome
+F730,ICD10,LearningDisabilityOrDownsSyndrome
+F731,ICD10,LearningDisabilityOrDownsSyndrome
+F738,ICD10,LearningDisabilityOrDownsSyndrome
+F739,ICD10,LearningDisabilityOrDownsSyndrome
+F78,ICD10,LearningDisabilityOrDownsSyndrome
+F780,ICD10,LearningDisabilityOrDownsSyndrome
+F781,ICD10,LearningDisabilityOrDownsSyndrome
+F788,ICD10,LearningDisabilityOrDownsSyndrome
+F789,ICD10,LearningDisabilityOrDownsSyndrome
+F79,ICD10,LearningDisabilityOrDownsSyndrome
+F790,ICD10,LearningDisabilityOrDownsSyndrome
+F791,ICD10,LearningDisabilityOrDownsSyndrome
+F798,ICD10,LearningDisabilityOrDownsSyndrome
+F799,ICD10,LearningDisabilityOrDownsSyndrome
+F80,ICD10,LearningDisabilityOrDownsSyndrome
+F800,ICD10,LearningDisabilityOrDownsSyndrome
+F801,ICD10,LearningDisabilityOrDownsSyndrome
+F802,ICD10,LearningDisabilityOrDownsSyndrome
+F803,ICD10,LearningDisabilityOrDownsSyndrome
+F808,ICD10,LearningDisabilityOrDownsSyndrome
+F809,ICD10,LearningDisabilityOrDownsSyndrome
+F81,ICD10,LearningDisabilityOrDownsSyndrome
+F810,ICD10,LearningDisabilityOrDownsSyndrome
+F811,ICD10,LearningDisabilityOrDownsSyndrome
+F812,ICD10,LearningDisabilityOrDownsSyndrome
+F813,ICD10,LearningDisabilityOrDownsSyndrome
+F818,ICD10,LearningDisabilityOrDownsSyndrome
+F819,ICD10,LearningDisabilityOrDownsSyndrome
+F82,ICD10,LearningDisabilityOrDownsSyndrome
+F82X,ICD10,LearningDisabilityOrDownsSyndrome
+F83,ICD10,LearningDisabilityOrDownsSyndrome
+F83X,ICD10,LearningDisabilityOrDownsSyndrome
+F84,ICD10,LearningDisabilityOrDownsSyndrome
+F840,ICD10,LearningDisabilityOrDownsSyndrome
+F841,ICD10,LearningDisabilityOrDownsSyndrome
+F842,ICD10,LearningDisabilityOrDownsSyndrome
+F843,ICD10,LearningDisabilityOrDownsSyndrome
+F844,ICD10,LearningDisabilityOrDownsSyndrome
+F845,ICD10,LearningDisabilityOrDownsSyndrome
+F848,ICD10,LearningDisabilityOrDownsSyndrome
+F849,ICD10,LearningDisabilityOrDownsSyndrome
+F88X,ICD10,LearningDisabilityOrDownsSyndrome
+F89X,ICD10,LearningDisabilityOrDownsSyndrome
+G10,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G10X,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G122,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G20,ICD10,ParkinsonsDisease
+G20X,ICD10,ParkinsonsDisease
+G21,ICD10,ParkinsonsDisease
+G211,ICD10,ParkinsonsDisease
+G212,ICD10,ParkinsonsDisease
+G213,ICD10,ParkinsonsDisease
+G214,ICD10,ParkinsonsDisease
+G218,ICD10,ParkinsonsDisease
+G219,ICD10,ParkinsonsDisease
+G22,ICD10,ParkinsonsDisease
+G22X,ICD10,ParkinsonsDisease
+G232,ICD10,ParkinsonsDisease
+G30,ICD10,Dementia
+G300,ICD10,Dementia
+G301,ICD10,Dementia
+G308,ICD10,Dementia
+G309,ICD10,Dementia
+G35,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G35X,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G40,ICD10,Epilepsy
+G400,ICD10,Epilepsy
+G401,ICD10,Epilepsy
+G402,ICD10,Epilepsy
+G403,ICD10,Epilepsy
+G404,ICD10,Epilepsy
+G405,ICD10,Epilepsy
+G406,ICD10,Epilepsy
+G407,ICD10,Epilepsy
+G408,ICD10,Epilepsy
+G409,ICD10,Epilepsy
+G41,ICD10,Epilepsy
+G410,ICD10,Epilepsy
+G411,ICD10,Epilepsy
+G412,ICD10,Epilepsy
+G418,ICD10,Epilepsy
+G419,ICD10,Epilepsy
+G45,ICD10,StrokeOrTia
+G450,ICD10,StrokeOrTia
+G451,ICD10,StrokeOrTia
+G452,ICD10,StrokeOrTia
+G453,ICD10,StrokeOrTia
+G454,ICD10,StrokeOrTia
+G458,ICD10,StrokeOrTia
+G459,ICD10,StrokeOrTia
+G70,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G700,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G709,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G733,ICD10,MotorNeuroneDiseaseOrMultipleSclerosisOrMyaestheniaOrHuntingtonsChorea
+G80,ICD10,CerebralPalsy
+G800,ICD10,CerebralPalsy
+G801,ICD10,CerebralPalsy
+G802,ICD10,CerebralPalsy
+G803,ICD10,CerebralPalsy
+G804,ICD10,CerebralPalsy
+G808,ICD10,CerebralPalsy
+G809,ICD10,CerebralPalsy
+I110,ICD10,HeartFailure
+I130,ICD10,HeartFailure
+I20,ICD10,CoronaryHeartDisease
+I200,ICD10,CoronaryHeartDisease
+I201,ICD10,CoronaryHeartDisease
+I208,ICD10,CoronaryHeartDisease
+I209,ICD10,CoronaryHeartDisease
+I21,ICD10,CoronaryHeartDisease
+I210,ICD10,CoronaryHeartDisease
+I211,ICD10,CoronaryHeartDisease
+I212,ICD10,CoronaryHeartDisease
+I213,ICD10,CoronaryHeartDisease
+I214,ICD10,CoronaryHeartDisease
+I219,ICD10,CoronaryHeartDisease
+I22,ICD10,CoronaryHeartDisease
+I220,ICD10,CoronaryHeartDisease
+I221,ICD10,CoronaryHeartDisease
+I228,ICD10,CoronaryHeartDisease
+I229,ICD10,CoronaryHeartDisease
+I23,ICD10,CoronaryHeartDisease
+I230,ICD10,CoronaryHeartDisease
+I231,ICD10,CoronaryHeartDisease
+I232,ICD10,CoronaryHeartDisease
+I233,ICD10,CoronaryHeartDisease
+I234,ICD10,CoronaryHeartDisease
+I235,ICD10,CoronaryHeartDisease
+I236,ICD10,CoronaryHeartDisease
+I238,ICD10,CoronaryHeartDisease
+I24,ICD10,CoronaryHeartDisease
+I240,ICD10,CoronaryHeartDisease
+I241,ICD10,CoronaryHeartDisease
+I248,ICD10,CoronaryHeartDisease
+I249,ICD10,CoronaryHeartDisease
+I25,ICD10,CoronaryHeartDisease
+I250,ICD10,CoronaryHeartDisease
+I251,ICD10,CoronaryHeartDisease
+I252,ICD10,CoronaryHeartDisease
+I253,ICD10,CoronaryHeartDisease
+I254,ICD10,CoronaryHeartDisease
+I255,ICD10,CoronaryHeartDisease
+I256,ICD10,CoronaryHeartDisease
+I258,ICD10,CoronaryHeartDisease
+I259,ICD10,CoronaryHeartDisease
+I26,ICD10,ThrombosisOrPulmonaryEmbolus
+I260,ICD10,ThrombosisOrPulmonaryEmbolus
+I269,ICD10,ThrombosisOrPulmonaryEmbolus
+I270,ICD10,PulmonaryHypertensionOrFibrosis
+I272,ICD10,PulmonaryHypertensionOrFibrosis
+I278,ICD10,PulmonaryHypertensionOrFibrosis
+I279,ICD10,PulmonaryHypertensionOrFibrosis
+I480,ICD10,AtrialFibrillation
+I481,ICD10,AtrialFibrillation
+I482,ICD10,AtrialFibrillation
+I483,ICD10,AtrialFibrillation
+I484,ICD10,AtrialFibrillation
+I489,ICD10,AtrialFibrillation
+I48X,ICD10,AtrialFibrillation
+I50,ICD10,HeartFailure
+I500,ICD10,HeartFailure
+I501,ICD10,HeartFailure
+I509,ICD10,HeartFailure
+I61,ICD10,StrokeOrTia
+I610,ICD10,StrokeOrTia
+I611,ICD10,StrokeOrTia
+I612,ICD10,StrokeOrTia
+I613,ICD10,StrokeOrTia
+I614,ICD10,StrokeOrTia
+I615,ICD10,StrokeOrTia
+I616,ICD10,StrokeOrTia
+I618,ICD10,StrokeOrTia
+I619,ICD10,StrokeOrTia
+I63,ICD10,StrokeOrTia
+I630,ICD10,StrokeOrTia
+I631,ICD10,StrokeOrTia
+I632,ICD10,StrokeOrTia
+I633,ICD10,StrokeOrTia
+I634,ICD10,StrokeOrTia
+I635,ICD10,StrokeOrTia
+I636,ICD10,ThrombosisOrPulmonaryEmbolus
+I636,ICD10,StrokeOrTia
+I638,ICD10,StrokeOrTia
+I639,ICD10,StrokeOrTia
+I64,ICD10,StrokeOrTia
+I64X,ICD10,StrokeOrTia
+I676,ICD10,ThrombosisOrPulmonaryEmbolus
+I712,ICD10,CongenitalHeartProblem
+I73,ICD10,PeripheralVascularDisease
+I731,ICD10,PeripheralVascularDisease
+I738,ICD10,PeripheralVascularDisease
+I739,ICD10,PeripheralVascularDisease
+I81,ICD10,ThrombosisOrPulmonaryEmbolus
+I81X,ICD10,ThrombosisOrPulmonaryEmbolus
+I82,ICD10,ThrombosisOrPulmonaryEmbolus
+I820,ICD10,ThrombosisOrPulmonaryEmbolus
+I822,ICD10,ThrombosisOrPulmonaryEmbolus
+I823,ICD10,ThrombosisOrPulmonaryEmbolus
+I828,ICD10,ThrombosisOrPulmonaryEmbolus
+I829,ICD10,ThrombosisOrPulmonaryEmbolus
+J43,ICD10,Copd
+J430,ICD10,Copd
+J431,ICD10,Copd
+J432,ICD10,Copd
+J438,ICD10,Copd
+J439,ICD10,Copd
+J44,ICD10,Copd
+J440,ICD10,Copd
+J441,ICD10,Copd
+J448,ICD10,Copd
+J449,ICD10,Copd
+J45,ICD10,Asthma
+J450,ICD10,Asthma
+J451,ICD10,Asthma
+J458,ICD10,Asthma
+J459,ICD10,Asthma
+J46,ICD10,Asthma
+J46X,ICD10,Asthma
+J47,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J47X,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J67,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J670,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J671,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J672,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J673,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J674,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J675,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J676,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J677,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J678,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J679,ICD10,CysticFibrosisBronchiectasisAlveolitis
+J84,ICD10,PulmonaryHypertensionOrFibrosis
+J840,ICD10,PulmonaryHypertensionOrFibrosis
+J841,ICD10,PulmonaryHypertensionOrFibrosis
+J848,ICD10,PulmonaryHypertensionOrFibrosis
+J849,ICD10,PulmonaryHypertensionOrFibrosis
+K50,ICD10,InflammatoryBowelDisease
+K500,ICD10,InflammatoryBowelDisease
+K501,ICD10,InflammatoryBowelDisease
+K509,ICD10,InflammatoryBowelDisease
+K51,ICD10,InflammatoryBowelDisease
+K510,ICD10,InflammatoryBowelDisease
+K512,ICD10,InflammatoryBowelDisease
+K513,ICD10,InflammatoryBowelDisease
+K514,ICD10,InflammatoryBowelDisease
+K515,ICD10,InflammatoryBowelDisease
+K518,ICD10,InflammatoryBowelDisease
+K519,ICD10,InflammatoryBowelDisease
+K703,ICD10,LiverCirrhosis
+K74,ICD10,LiverCirrhosis
+K743,ICD10,LiverCirrhosis
+K744,ICD10,LiverCirrhosis
+K745,ICD10,LiverCirrhosis
+K746,ICD10,LiverCirrhosis
+M05,ICD10,RheumatoidArthritisOrSle
+M050,ICD10,RheumatoidArthritisOrSle
+M0500,ICD10,RheumatoidArthritisOrSle
+M0501,ICD10,RheumatoidArthritisOrSle
+M0502,ICD10,RheumatoidArthritisOrSle
+M0503,ICD10,RheumatoidArthritisOrSle
+M0504,ICD10,RheumatoidArthritisOrSle
+M0505,ICD10,RheumatoidArthritisOrSle
+M0506,ICD10,RheumatoidArthritisOrSle
+M0507,ICD10,RheumatoidArthritisOrSle
+M0508,ICD10,RheumatoidArthritisOrSle
+M0509,ICD10,RheumatoidArthritisOrSle
+M051,ICD10,RheumatoidArthritisOrSle
+M0510,ICD10,RheumatoidArthritisOrSle
+M0511,ICD10,RheumatoidArthritisOrSle
+M0512,ICD10,RheumatoidArthritisOrSle
+M0513,ICD10,RheumatoidArthritisOrSle
+M0514,ICD10,RheumatoidArthritisOrSle
+M0515,ICD10,RheumatoidArthritisOrSle
+M0516,ICD10,RheumatoidArthritisOrSle
+M0517,ICD10,RheumatoidArthritisOrSle
+M0518,ICD10,RheumatoidArthritisOrSle
+M0519,ICD10,RheumatoidArthritisOrSle
+M052,ICD10,RheumatoidArthritisOrSle
+M0520,ICD10,RheumatoidArthritisOrSle
+M0521,ICD10,RheumatoidArthritisOrSle
+M0522,ICD10,RheumatoidArthritisOrSle
+M0523,ICD10,RheumatoidArthritisOrSle
+M0524,ICD10,RheumatoidArthritisOrSle
+M0525,ICD10,RheumatoidArthritisOrSle
+M0526,ICD10,RheumatoidArthritisOrSle
+M0527,ICD10,RheumatoidArthritisOrSle
+M0528,ICD10,RheumatoidArthritisOrSle
+M0529,ICD10,RheumatoidArthritisOrSle
+M053,ICD10,RheumatoidArthritisOrSle
+M0530,ICD10,RheumatoidArthritisOrSle
+M0531,ICD10,RheumatoidArthritisOrSle
+M0532,ICD10,RheumatoidArthritisOrSle
+M0533,ICD10,RheumatoidArthritisOrSle
+M0534,ICD10,RheumatoidArthritisOrSle
+M0535,ICD10,RheumatoidArthritisOrSle
+M0536,ICD10,RheumatoidArthritisOrSle
+M0537,ICD10,RheumatoidArthritisOrSle
+M0538,ICD10,RheumatoidArthritisOrSle
+M0539,ICD10,RheumatoidArthritisOrSle
+M058,ICD10,RheumatoidArthritisOrSle
+M0580,ICD10,RheumatoidArthritisOrSle
+M0581,ICD10,RheumatoidArthritisOrSle
+M0582,ICD10,RheumatoidArthritisOrSle
+M0583,ICD10,RheumatoidArthritisOrSle
+M0584,ICD10,RheumatoidArthritisOrSle
+M0585,ICD10,RheumatoidArthritisOrSle
+M0586,ICD10,RheumatoidArthritisOrSle
+M0587,ICD10,RheumatoidArthritisOrSle
+M0588,ICD10,RheumatoidArthritisOrSle
+M0589,ICD10,RheumatoidArthritisOrSle
+M059,ICD10,RheumatoidArthritisOrSle
+M0590,ICD10,RheumatoidArthritisOrSle
+M0591,ICD10,RheumatoidArthritisOrSle
+M0592,ICD10,RheumatoidArthritisOrSle
+M0593,ICD10,RheumatoidArthritisOrSle
+M0594,ICD10,RheumatoidArthritisOrSle
+M0595,ICD10,RheumatoidArthritisOrSle
+M0596,ICD10,RheumatoidArthritisOrSle
+M0597,ICD10,RheumatoidArthritisOrSle
+M0598,ICD10,RheumatoidArthritisOrSle
+M0599,ICD10,RheumatoidArthritisOrSle
+M06,ICD10,RheumatoidArthritisOrSle
+M060,ICD10,RheumatoidArthritisOrSle
+M0600,ICD10,RheumatoidArthritisOrSle
+M0601,ICD10,RheumatoidArthritisOrSle
+M0602,ICD10,RheumatoidArthritisOrSle
+M0603,ICD10,RheumatoidArthritisOrSle
+M0604,ICD10,RheumatoidArthritisOrSle
+M0605,ICD10,RheumatoidArthritisOrSle
+M0606,ICD10,RheumatoidArthritisOrSle
+M0607,ICD10,RheumatoidArthritisOrSle
+M0608,ICD10,RheumatoidArthritisOrSle
+M0609,ICD10,RheumatoidArthritisOrSle
+M061,ICD10,RheumatoidArthritisOrSle
+M0610,ICD10,RheumatoidArthritisOrSle
+M0611,ICD10,RheumatoidArthritisOrSle
+M0612,ICD10,RheumatoidArthritisOrSle
+M0613,ICD10,RheumatoidArthritisOrSle
+M0614,ICD10,RheumatoidArthritisOrSle
+M0615,ICD10,RheumatoidArthritisOrSle
+M0616,ICD10,RheumatoidArthritisOrSle
+M0617,ICD10,RheumatoidArthritisOrSle
+M0618,ICD10,RheumatoidArthritisOrSle
+M0619,ICD10,RheumatoidArthritisOrSle
+M062,ICD10,RheumatoidArthritisOrSle
+M0620,ICD10,RheumatoidArthritisOrSle
+M0621,ICD10,RheumatoidArthritisOrSle
+M0622,ICD10,RheumatoidArthritisOrSle
+M0623,ICD10,RheumatoidArthritisOrSle
+M0624,ICD10,RheumatoidArthritisOrSle
+M0625,ICD10,RheumatoidArthritisOrSle
+M0626,ICD10,RheumatoidArthritisOrSle
+M0627,ICD10,RheumatoidArthritisOrSle
+M0628,ICD10,RheumatoidArthritisOrSle
+M0629,ICD10,RheumatoidArthritisOrSle
+M063,ICD10,RheumatoidArthritisOrSle
+M0630,ICD10,RheumatoidArthritisOrSle
+M0631,ICD10,RheumatoidArthritisOrSle
+M0632,ICD10,RheumatoidArthritisOrSle
+M0633,ICD10,RheumatoidArthritisOrSle
+M0634,ICD10,RheumatoidArthritisOrSle
+M0635,ICD10,RheumatoidArthritisOrSle
+M0636,ICD10,RheumatoidArthritisOrSle
+M0637,ICD10,RheumatoidArthritisOrSle
+M0638,ICD10,RheumatoidArthritisOrSle
+M0639,ICD10,RheumatoidArthritisOrSle
+M064,ICD10,RheumatoidArthritisOrSle
+M0640,ICD10,RheumatoidArthritisOrSle
+M0641,ICD10,RheumatoidArthritisOrSle
+M0642,ICD10,RheumatoidArthritisOrSle
+M0643,ICD10,RheumatoidArthritisOrSle
+M0644,ICD10,RheumatoidArthritisOrSle
+M0645,ICD10,RheumatoidArthritisOrSle
+M0646,ICD10,RheumatoidArthritisOrSle
+M0647,ICD10,RheumatoidArthritisOrSle
+M0648,ICD10,RheumatoidArthritisOrSle
+M0649,ICD10,RheumatoidArthritisOrSle
+M068,ICD10,RheumatoidArthritisOrSle
+M0680,ICD10,RheumatoidArthritisOrSle
+M0681,ICD10,RheumatoidArthritisOrSle
+M0682,ICD10,RheumatoidArthritisOrSle
+M0683,ICD10,RheumatoidArthritisOrSle
+M0684,ICD10,RheumatoidArthritisOrSle
+M0685,ICD10,RheumatoidArthritisOrSle
+M0686,ICD10,RheumatoidArthritisOrSle
+M0687,ICD10,RheumatoidArthritisOrSle
+M0688,ICD10,RheumatoidArthritisOrSle
+M0689,ICD10,RheumatoidArthritisOrSle
+M069,ICD10,RheumatoidArthritisOrSle
+M0690,ICD10,RheumatoidArthritisOrSle
+M0691,ICD10,RheumatoidArthritisOrSle
+M0692,ICD10,RheumatoidArthritisOrSle
+M0693,ICD10,RheumatoidArthritisOrSle
+M0694,ICD10,RheumatoidArthritisOrSle
+M0695,ICD10,RheumatoidArthritisOrSle
+M0696,ICD10,RheumatoidArthritisOrSle
+M0697,ICD10,RheumatoidArthritisOrSle
+M0698,ICD10,RheumatoidArthritisOrSle
+M0699,ICD10,RheumatoidArthritisOrSle
+M080,ICD10,RheumatoidArthritisOrSle
+M0800,ICD10,RheumatoidArthritisOrSle
+M0801,ICD10,RheumatoidArthritisOrSle
+M0802,ICD10,RheumatoidArthritisOrSle
+M0803,ICD10,RheumatoidArthritisOrSle
+M0804,ICD10,RheumatoidArthritisOrSle
+M0805,ICD10,RheumatoidArthritisOrSle
+M0806,ICD10,RheumatoidArthritisOrSle
+M0807,ICD10,RheumatoidArthritisOrSle
+M0808,ICD10,RheumatoidArthritisOrSle
+M0809,ICD10,RheumatoidArthritisOrSle
+M32,ICD10,RheumatoidArthritisOrSle
+M320,ICD10,RheumatoidArthritisOrSle
+M321,ICD10,RheumatoidArthritisOrSle
+M328,ICD10,RheumatoidArthritisOrSle
+M329,ICD10,RheumatoidArthritisOrSle
+M484,ICD10,PriorFractureOfHipWristSpineHumerus
+M4840,ICD10,PriorFractureOfHipWristSpineHumerus
+M4841,ICD10,PriorFractureOfHipWristSpineHumerus
+M4842,ICD10,PriorFractureOfHipWristSpineHumerus
+M4843,ICD10,PriorFractureOfHipWristSpineHumerus
+M4844,ICD10,PriorFractureOfHipWristSpineHumerus
+M4845,ICD10,PriorFractureOfHipWristSpineHumerus
+M4846,ICD10,PriorFractureOfHipWristSpineHumerus
+M4847,ICD10,PriorFractureOfHipWristSpineHumerus
+M4848,ICD10,PriorFractureOfHipWristSpineHumerus
+M4849,ICD10,PriorFractureOfHipWristSpineHumerus
+M8041,ICD10,PriorFractureOfHipWristSpineHumerus
+M8042,ICD10,PriorFractureOfHipWristSpineHumerus
+M8051,ICD10,PriorFractureOfHipWristSpineHumerus
+M8052,ICD10,PriorFractureOfHipWristSpineHumerus
+N183,ICD10,ChronicKidneyDisease3
+N184,ICD10,ChronicKidneyDisease4
+N185,ICD10,ChronicKidneyDisease5
+O225,ICD10,ThrombosisOrPulmonaryEmbolus
+O873,ICD10,ThrombosisOrPulmonaryEmbolus
+Q200,ICD10,CongenitalHeartProblem
+Q203,ICD10,CongenitalHeartProblem
+Q204,ICD10,CongenitalHeartProblem
+Q205,ICD10,CongenitalHeartProblem
+Q208,ICD10,CongenitalHeartProblem
+Q211,ICD10,CongenitalHeartProblem
+Q212,ICD10,CongenitalHeartProblem
+Q22,ICD10,CongenitalHeartProblem
+Q220,ICD10,CongenitalHeartProblem
+Q221,ICD10,CongenitalHeartProblem
+Q222,ICD10,CongenitalHeartProblem
+Q223,ICD10,CongenitalHeartProblem
+Q224,ICD10,CongenitalHeartProblem
+Q225,ICD10,CongenitalHeartProblem
+Q226,ICD10,CongenitalHeartProblem
+Q228,ICD10,CongenitalHeartProblem
+Q229,ICD10,CongenitalHeartProblem
+Q23,ICD10,CongenitalHeartProblem
+Q230,ICD10,CongenitalHeartProblem
+Q231,ICD10,CongenitalHeartProblem
+Q232,ICD10,CongenitalHeartProblem
+Q233,ICD10,CongenitalHeartProblem
+Q234,ICD10,CongenitalHeartProblem
+Q238,ICD10,CongenitalHeartProblem
+Q239,ICD10,CongenitalHeartProblem
+Q24,ICD10,CongenitalHeartProblem
+Q240,ICD10,CongenitalHeartProblem
+Q241,ICD10,CongenitalHeartProblem
+Q242,ICD10,CongenitalHeartProblem
+Q243,ICD10,CongenitalHeartProblem
+Q244,ICD10,CongenitalHeartProblem
+Q245,ICD10,CongenitalHeartProblem
+Q246,ICD10,CongenitalHeartProblem
+Q248,ICD10,CongenitalHeartProblem
+Q249,ICD10,CongenitalHeartProblem
+Q25,ICD10,CongenitalHeartProblem
+Q250,ICD10,CongenitalHeartProblem
+Q251,ICD10,CongenitalHeartProblem
+Q252,ICD10,CongenitalHeartProblem
+Q253,ICD10,CongenitalHeartProblem
+Q254,ICD10,CongenitalHeartProblem
+Q255,ICD10,CongenitalHeartProblem
+Q256,ICD10,CongenitalHeartProblem
+Q257,ICD10,CongenitalHeartProblem
+Q258,ICD10,CongenitalHeartProblem
+Q259,ICD10,CongenitalHeartProblem
+Q26,ICD10,CongenitalHeartProblem
+Q260,ICD10,CongenitalHeartProblem
+Q261,ICD10,CongenitalHeartProblem
+Q262,ICD10,CongenitalHeartProblem
+Q263,ICD10,CongenitalHeartProblem
+Q264,ICD10,CongenitalHeartProblem
+Q265,ICD10,CongenitalHeartProblem
+Q266,ICD10,CongenitalHeartProblem
+Q268,ICD10,CongenitalHeartProblem
+Q269,ICD10,CongenitalHeartProblem
+Q288,ICD10,CongenitalHeartProblem
+Q878,ICD10,CongenitalHeartProblem
+Q893,ICD10,CongenitalHeartProblem
+Q898,ICD10,CongenitalHeartProblem
+Q90,ICD10,LearningDisabilityOrDownsSyndrome
+Q900,ICD10,LearningDisabilityOrDownsSyndrome
+Q901,ICD10,LearningDisabilityOrDownsSyndrome
+Q902,ICD10,LearningDisabilityOrDownsSyndrome
+Q909,ICD10,LearningDisabilityOrDownsSyndrome
+S220,ICD10,PriorFractureOfHipWristSpineHumerus
+S2200,ICD10,PriorFractureOfHipWristSpineHumerus
+S221,ICD10,PriorFractureOfHipWristSpineHumerus
+S2210,ICD10,PriorFractureOfHipWristSpineHumerus
+S422,ICD10,PriorFractureOfHipWristSpineHumerus
+S4220,ICD10,PriorFractureOfHipWristSpineHumerus
+S4221,ICD10,PriorFractureOfHipWristSpineHumerus
+S525,ICD10,PriorFractureOfHipWristSpineHumerus
+S5250,ICD10,PriorFractureOfHipWristSpineHumerus
+S5251,ICD10,PriorFractureOfHipWristSpineHumerus
+S720,ICD10,PriorFractureOfHipWristSpineHumerus
+S7200,ICD10,PriorFractureOfHipWristSpineHumerus
+S7201,ICD10,PriorFractureOfHipWristSpineHumerus
+10073011000001107,DM+D,TakingAntiLeukotrieneOrLaba
+10075611000001101,DM+D,TakingAntiLeukotrieneOrLaba
+10193111000001107,DM+D,PrescribedImmunoSuppressants
+10354511000001104,DM+D,PrescribedImmunoSuppressants
+10354711000001109,DM+D,PrescribedImmunoSuppressants
+10626311000001106,DM+D,PrescribedImmunoSuppressants
+11176411000001106,DM+D,TakingAntiLeukotrieneOrLaba
+11413311000001103,DM+D,PrescribedImmunoSuppressants
+11416711000001106,DM+D,PrescribedImmunoSuppressants
+11619211000001106,DM+D,PrescribedImmunoSuppressants
+11619611000001108,DM+D,PrescribedImmunoSuppressants
+11620011000001100,DM+D,PrescribedImmunoSuppressants
+11649511000001103,DM+D,PrescribedImmunoSuppressants
+11649611000001104,DM+D,PrescribedImmunoSuppressants
+11649711000001108,DM+D,PrescribedImmunoSuppressants
+11755211000001108,DM+D,PrescribedImmunoSuppressants
+11755711000001101,DM+D,PrescribedImmunoSuppressants
+11756011000001107,DM+D,PrescribedImmunoSuppressants
+11756511000001104,DM+D,PrescribedImmunoSuppressants
+11762911000001102,DM+D,PrescribedImmunoSuppressants
+11763011000001105,DM+D,PrescribedImmunoSuppressants
+12626211000001108,DM+D,TakingAntiLeukotrieneOrLaba
+12906411000001100,DM+D,TakingAntiLeukotrieneOrLaba
+12911011000001100,DM+D,TakingAntiLeukotrieneOrLaba
+134510006,DM+D,TakingAntiLeukotrieneOrLaba
+134640000,DM+D,PrescribedImmunoSuppressants
+13851311000001109,DM+D,PrescribedImmunoSuppressants
+15380911000001104,DM+D,PrescribedImmunoSuppressants
+15603811000001106,DM+D,PrescribedImmunoSuppressants
+15614511000001109,DM+D,PrescribedImmunoSuppressants
+16035911000001102,DM+D,PrescribedImmunoSuppressants
+16306511000001107,DM+D,PrescribedImmunoSuppressants
+16306711000001102,DM+D,PrescribedImmunoSuppressants
+16306911000001100,DM+D,PrescribedImmunoSuppressants
+16591411000001103,DM+D,PrescribedImmunoSuppressants
+16592911000001100,DM+D,PrescribedImmunoSuppressants
+16602911000001106,DM+D,PrescribedImmunoSuppressants
+16603211000001108,DM+D,PrescribedImmunoSuppressants
+16603711000001101,DM+D,PrescribedImmunoSuppressants
+16603811000001109,DM+D,PrescribedImmunoSuppressants
+16636811000001107,DM+D,PrescribedImmunoSuppressants
+16658211000001106,DM+D,PrescribedImmunoSuppressants
+16658411000001105,DM+D,PrescribedImmunoSuppressants
+16658611000001108,DM+D,PrescribedImmunoSuppressants
+16658811000001107,DM+D,PrescribedImmunoSuppressants
+16698811000001101,DM+D,PrescribedImmunoSuppressants
+16699011000001102,DM+D,PrescribedImmunoSuppressants
+17190711000001109,DM+D,PrescribedImmunoSuppressants
+17191011000001103,DM+D,PrescribedImmunoSuppressants
+17224011000001108,DM+D,PrescribedImmunoSuppressants
+17236011000001100,DM+D,PrescribedImmunoSuppressants
+172611000001109,DM+D,PrescribedImmunoSuppressants
+17665611000001109,DM+D,PrescribedImmunoSuppressants
+17665811000001108,DM+D,PrescribedImmunoSuppressants
+17666911000001105,DM+D,PrescribedImmunoSuppressants
+18044211000001101,DM+D,PrescribedImmunoSuppressants
+18044411000001102,DM+D,PrescribedImmunoSuppressants
+18044811000001100,DM+D,PrescribedImmunoSuppressants
+18163911000001106,DM+D,PrescribedImmunoSuppressants
+18164111000001105,DM+D,PrescribedImmunoSuppressants
+18166711000001102,DM+D,PrescribedImmunoSuppressants
+18166911000001100,DM+D,PrescribedImmunoSuppressants
+18401611000001102,DM+D,PrescribedImmunoSuppressants
+18430811000001103,DM+D,PrescribedImmunoSuppressants
+18617711000001101,DM+D,PrescribedImmunoSuppressants
+18618011000001102,DM+D,PrescribedImmunoSuppressants
+18618211000001107,DM+D,PrescribedImmunoSuppressants
+18741011000001105,DM+D,PrescribedImmunoSuppressants
+18748011000001104,DM+D,PrescribedImmunoSuppressants
+19265711000001106,DM+D,PrescribedImmunoSuppressants
+19265811000001103,DM+D,PrescribedImmunoSuppressants
+19293811000001104,DM+D,PrescribedImmunoSuppressants
+19294011000001107,DM+D,PrescribedImmunoSuppressants
+19294211000001102,DM+D,PrescribedImmunoSuppressants
+19363311000001102,DM+D,PrescribedImmunoSuppressants
+19363911000001101,DM+D,PrescribedImmunoSuppressants
+19376711000001104,DM+D,PrescribedImmunoSuppressants
+19376911000001102,DM+D,PrescribedImmunoSuppressants
+19377111000001102,DM+D,PrescribedImmunoSuppressants
+19377311000001100,DM+D,PrescribedImmunoSuppressants
+19410411000001109,DM+D,PrescribedImmunoSuppressants
+19410511000001108,DM+D,PrescribedImmunoSuppressants
+19463411000001100,DM+D,PrescribedImmunoSuppressants
+19464711000001108,DM+D,PrescribedImmunoSuppressants
+19496811000001109,DM+D,PrescribedImmunoSuppressants
+19497011000001100,DM+D,PrescribedImmunoSuppressants
+19498011000001104,DM+D,PrescribedImmunoSuppressants
+19568411000001100,DM+D,TakingAntiLeukotrieneOrLaba
+209911000001103,DM+D,PrescribedImmunoSuppressants
+21019411000001101,DM+D,TakingAntiLeukotrieneOrLaba
+21019711000001107,DM+D,TakingAntiLeukotrieneOrLaba
+21020611000001104,DM+D,TakingAntiLeukotrieneOrLaba
+21113711000001102,DM+D,TakingAntiLeukotrieneOrLaba
+21113811000001105,DM+D,TakingAntiLeukotrieneOrLaba
+21113911000001100,DM+D,TakingAntiLeukotrieneOrLaba
+22650111000001100,DM+D,TakingAntiLeukotrieneOrLaba
+22652611000001109,DM+D,PrescribedImmunoSuppressants
+22685811000001107,DM+D,PrescribedImmunoSuppressants
+22690811000001102,DM+D,PrescribedImmunoSuppressants
+22754211000001107,DM+D,PrescribedImmunoSuppressants
+22754411000001106,DM+D,PrescribedImmunoSuppressants
+22754611000001109,DM+D,PrescribedImmunoSuppressants
+22754811000001108,DM+D,PrescribedImmunoSuppressants
+22755011000001103,DM+D,PrescribedImmunoSuppressants
+23285111000001105,DM+D,PrescribedImmunoSuppressants
+23285411000001100,DM+D,PrescribedImmunoSuppressants
+23285711000001106,DM+D,PrescribedImmunoSuppressants
+23286011000001100,DM+D,PrescribedImmunoSuppressants
+23307411000001100,DM+D,PrescribedImmunoSuppressants
+23344511000001104,DM+D,PrescribedImmunoSuppressants
+23621711000001102,DM+D,TakingAntiLeukotrieneOrLaba
+23622011000001107,DM+D,TakingAntiLeukotrieneOrLaba
+23661311000001105,DM+D,TakingAntiLeukotrieneOrLaba
+23661411000001103,DM+D,TakingAntiLeukotrieneOrLaba
+24034811000001102,DM+D,PrescribedImmunoSuppressants
+24035111000001108,DM+D,PrescribedImmunoSuppressants
+24054811000001101,DM+D,PrescribedImmunoSuppressants
+24055011000001106,DM+D,PrescribedImmunoSuppressants
+24504611000001108,DM+D,PrescribedImmunoSuppressants
+24561811000001109,DM+D,PrescribedImmunoSuppressants
+24565711000001104,DM+D,PrescribedImmunoSuppressants
+24780211000001103,DM+D,PrescribedImmunoSuppressants
+24796311000001105,DM+D,PrescribedImmunoSuppressants
+24797411000001101,DM+D,PrescribedImmunoSuppressants
+24856511000001109,DM+D,PrescribedImmunoSuppressants
+25091011000001106,DM+D,PrescribedImmunoSuppressants
+25091211000001101,DM+D,PrescribedImmunoSuppressants
+25254111000001105,DM+D,TakingAntiLeukotrieneOrLaba
+25254711000001106,DM+D,TakingAntiLeukotrieneOrLaba
+25444111000001106,DM+D,PrescribedImmunoSuppressants
+25503511000001103,DM+D,PrescribedImmunoSuppressants
+26112111000001106,DM+D,TakingAntiLeukotrieneOrLaba
+26148711000001101,DM+D,TakingAntiLeukotrieneOrLaba
+26658011000001100,DM+D,PrescribedImmunoSuppressants
+27953511000001104,DM+D,PrescribedImmunoSuppressants
+28018011000001106,DM+D,PrescribedImmunoSuppressants
+28049811000001100,DM+D,PrescribedImmunoSuppressants
+28335911000001108,DM+D,PrescribedImmunoSuppressants
+28337411000001106,DM+D,PrescribedImmunoSuppressants
+28338911000001102,DM+D,PrescribedImmunoSuppressants
+28357211000001106,DM+D,TakingAntiLeukotrieneOrLaba
+28365011000001100,DM+D,TakingAntiLeukotrieneOrLaba
+284711000001102,DM+D,PrescribedImmunoSuppressants
+28791811000001107,DM+D,PrescribedImmunoSuppressants
+28792111000001105,DM+D,PrescribedImmunoSuppressants
+28792411000001100,DM+D,PrescribedImmunoSuppressants
+28798211000001102,DM+D,PrescribedOralSteroids
+28799011000001102,DM+D,PrescribedOralSteroids
+28799311000001104,DM+D,PrescribedOralSteroids
+28799611000001109,DM+D,PrescribedOralSteroids
+28799811000001108,DM+D,PrescribedOralSteroids
+28800611000001103,DM+D,PrescribedImmunoSuppressants
+28800911000001109,DM+D,PrescribedImmunoSuppressants
+28808411000001103,DM+D,PrescribedOralSteroids
+28808611000001100,DM+D,PrescribedOralSteroids
+28808711000001109,DM+D,PrescribedOralSteroids
+28808811000001101,DM+D,PrescribedImmunoSuppressants
+28808911000001106,DM+D,PrescribedImmunoSuppressants
+28809011000001102,DM+D,PrescribedImmunoSuppressants
+28947611000001104,DM+D,PrescribedImmunoSuppressants
+28947711000001108,DM+D,PrescribedImmunoSuppressants
+29424511000001109,DM+D,PrescribedOralSteroids
+29782111000001107,DM+D,TakingAntiLeukotrieneOrLaba
+29782511000001103,DM+D,TakingAntiLeukotrieneOrLaba
+29821511000001103,DM+D,PrescribedImmunoSuppressants
+29828011000001100,DM+D,PrescribedImmunoSuppressants
+29894911000001104,DM+D,PrescribedImmunoSuppressants
+29895411000001108,DM+D,PrescribedImmunoSuppressants
+29903711000001107,DM+D,PrescribedImmunoSuppressants
+29903811000001104,DM+D,PrescribedImmunoSuppressants
+29904211000001102,DM+D,PrescribedOralSteroids
+29934611000001109,DM+D,PrescribedImmunoSuppressants
+303511000001103,DM+D,PrescribedImmunoSuppressants
+3082411000001100,DM+D,TakingAntiLeukotrieneOrLaba
+3084011000001103,DM+D,TakingAntiLeukotrieneOrLaba
+30950311000001106,DM+D,TakingAntiLeukotrieneOrLaba
+31063111000001106,DM+D,TakingAntiLeukotrieneOrLaba
+31063411000001101,DM+D,TakingAntiLeukotrieneOrLaba
+31087411000001106,DM+D,TakingAntiLeukotrieneOrLaba
+31087511000001105,DM+D,TakingAntiLeukotrieneOrLaba
+31143811000001101,DM+D,PrescribedImmunoSuppressants
+31143911000001106,DM+D,PrescribedImmunoSuppressants
+318611000001108,DM+D,PrescribedImmunoSuppressants
+3186911000001100,DM+D,TakingAntiLeukotrieneOrLaba
+3187211000001106,DM+D,TakingAntiLeukotrieneOrLaba
+3188311000001102,DM+D,TakingAntiLeukotrieneOrLaba
+319211000001101,DM+D,PrescribedImmunoSuppressants
+320258002,DM+D,TakingAntiLeukotrieneOrLaba
+320259005,DM+D,TakingAntiLeukotrieneOrLaba
+3206811000001109,DM+D,TakingAntiLeukotrieneOrLaba
+320884002,DM+D,TakingAntiLeukotrieneOrLaba
+320885001,DM+D,TakingAntiLeukotrieneOrLaba
+320889007,DM+D,TakingAntiLeukotrieneOrLaba
+3243511000001107,DM+D,TakingAntiLeukotrieneOrLaba
+3245011000001103,DM+D,TakingAntiLeukotrieneOrLaba
+325426006,DM+D,PrescribedOralSteroids
+325427002,DM+D,PrescribedOralSteroids
+325442004,DM+D,PrescribedOralSteroids
+325443009,DM+D,PrescribedOralSteroids
+325444003,DM+D,PrescribedOralSteroids
+325450008,DM+D,PrescribedOralSteroids
+32611811000001105,DM+D,PrescribedOralSteroids
+32652311000001103,DM+D,PrescribedOralSteroids
+32652511000001109,DM+D,PrescribedOralSteroids
+327070006,DM+D,PrescribedImmunoSuppressants
+327071005,DM+D,PrescribedImmunoSuppressants
+327072003,DM+D,PrescribedImmunoSuppressants
+327082002,DM+D,PrescribedImmunoSuppressants
+327083007,DM+D,PrescribedImmunoSuppressants
+327085000,DM+D,PrescribedImmunoSuppressants
+327090002,DM+D,PrescribedImmunoSuppressants
+327096008,DM+D,PrescribedImmunoSuppressants
+327097004,DM+D,PrescribedImmunoSuppressants
+327103006,DM+D,PrescribedImmunoSuppressants
+327104000,DM+D,PrescribedImmunoSuppressants
+327106003,DM+D,PrescribedImmunoSuppressants
+327109005,DM+D,PrescribedImmunoSuppressants
+327212001,DM+D,PrescribedImmunoSuppressants
+327217007,DM+D,PrescribedImmunoSuppressants
+32781411000001102,DM+D,PrescribedOralSteroids
+32926011000001100,DM+D,TakingAntiLeukotrieneOrLaba
+3294211000001101,DM+D,TakingAntiLeukotrieneOrLaba
+3294611000001104,DM+D,TakingAntiLeukotrieneOrLaba
+32960711000001105,DM+D,TakingAntiLeukotrieneOrLaba
+331111000001100,DM+D,PrescribedOralSteroids
+33561211000001109,DM+D,TakingAntiLeukotrieneOrLaba
+33679711000001103,DM+D,TakingAntiLeukotrieneOrLaba
+33756811000001106,DM+D,PrescribedImmunoSuppressants
+33760311000001105,DM+D,PrescribedImmunoSuppressants
+3380111000001107,DM+D,TakingAntiLeukotrieneOrLaba
+34023611000001101,DM+D,TakingAntiLeukotrieneOrLaba
+34023811000001102,DM+D,TakingAntiLeukotrieneOrLaba
+34165611000001103,DM+D,PrescribedImmunoSuppressants
+34215311000001107,DM+D,TakingAntiLeukotrieneOrLaba
+34215511000001101,DM+D,TakingAntiLeukotrieneOrLaba
+34613711000001108,DM+D,PrescribedImmunoSuppressants
+34634311000001103,DM+D,PrescribedImmunoSuppressants
+34634611000001108,DM+D,PrescribedImmunoSuppressants
+34675711000001103,DM+D,TakingAntiLeukotrieneOrLaba
+34677011000001107,DM+D,TakingAntiLeukotrieneOrLaba
+34681611000001100,DM+D,TakingAntiLeukotrieneOrLaba
+34686311000001102,DM+D,PrescribedImmunoSuppressants
+34686811000001106,DM+D,PrescribedImmunoSuppressants
+34697611000001108,DM+D,PrescribedImmunoSuppressants
+34697711000001104,DM+D,PrescribedImmunoSuppressants
+347811000001104,DM+D,PrescribedImmunoSuppressants
+34807711000001106,DM+D,PrescribedImmunoSuppressants
+34809211000001105,DM+D,PrescribedImmunoSuppressants
+34809411000001109,DM+D,PrescribedImmunoSuppressants
+34812111000001106,DM+D,TakingAntiLeukotrieneOrLaba
+3490411000001109,DM+D,PrescribedImmunoSuppressants
+3490711000001103,DM+D,PrescribedImmunoSuppressants
+34950311000001108,DM+D,TakingAntiLeukotrieneOrLaba
+34950611000001103,DM+D,TakingAntiLeukotrieneOrLaba
+34952211000001104,DM+D,TakingAntiLeukotrieneOrLaba
+34959911000001103,DM+D,PrescribedImmunoSuppressants
+34963311000001109,DM+D,PrescribedImmunoSuppressants
+35035511000001109,DM+D,PrescribedImmunoSuppressants
+35041211000001107,DM+D,PrescribedImmunoSuppressants
+35058211000001100,DM+D,PrescribedImmunoSuppressants
+35086111000001103,DM+D,PrescribedImmunoSuppressants
+353865002,DM+D,PrescribedImmunoSuppressants
+35424111000001107,DM+D,PrescribedImmunoSuppressants
+35515311000001106,DM+D,TakingAntiLeukotrieneOrLaba
+35515511000001100,DM+D,TakingAntiLeukotrieneOrLaba
+35594011000001105,DM+D,TakingAntiLeukotrieneOrLaba
+35594211000001100,DM+D,TakingAntiLeukotrieneOrLaba
+35594411000001101,DM+D,TakingAntiLeukotrieneOrLaba
+35647311000001101,DM+D,TakingAntiLeukotrieneOrLaba
+35647511000001107,DM+D,TakingAntiLeukotrieneOrLaba
+35647611000001106,DM+D,TakingAntiLeukotrieneOrLaba
+35650811000001109,DM+D,TakingAntiLeukotrieneOrLaba
+35906211000001100,DM+D,PrescribedImmunoSuppressants
+35907511000001100,DM+D,PrescribedImmunoSuppressants
+35912011000001109,DM+D,TakingAntiLeukotrieneOrLaba
+35914611000001105,DM+D,PrescribedImmunoSuppressants
+35934711000001107,DM+D,PrescribedImmunoSuppressants
+35934811000001104,DM+D,PrescribedImmunoSuppressants
+35937811000001108,DM+D,TakingAntiLeukotrieneOrLaba
+35938011000001101,DM+D,TakingAntiLeukotrieneOrLaba
+36026811000001104,DM+D,PrescribedImmunoSuppressants
+36026911000001109,DM+D,PrescribedImmunoSuppressants
+36027011000001108,DM+D,PrescribedImmunoSuppressants
+36027111000001109,DM+D,PrescribedImmunoSuppressants
+36027211000001103,DM+D,PrescribedImmunoSuppressants
+36027311000001106,DM+D,PrescribedImmunoSuppressants
+36027411000001104,DM+D,PrescribedImmunoSuppressants
+36030311000001108,DM+D,PrescribedImmunoSuppressants
+36049011000001101,DM+D,PrescribedImmunoSuppressants
+36051411000001106,DM+D,PrescribedImmunoSuppressants
+36139311000001109,DM+D,PrescribedImmunoSuppressants
+36139511000001103,DM+D,PrescribedImmunoSuppressants
+36140311000001101,DM+D,PrescribedImmunoSuppressants
+36460711000001109,DM+D,PrescribedImmunoSuppressants
+36460911000001106,DM+D,PrescribedImmunoSuppressants
+3659911000001102,DM+D,PrescribedImmunoSuppressants
+36604711000001102,DM+D,TakingAntiLeukotrieneOrLaba
+3661611000001102,DM+D,PrescribedImmunoSuppressants
+37143311000001108,DM+D,PrescribedImmunoSuppressants
+37236211000001108,DM+D,PrescribedImmunoSuppressants
+375711000001100,DM+D,TakingAntiLeukotrieneOrLaba
+376255008,DM+D,PrescribedImmunoSuppressants
+37939711000001107,DM+D,PrescribedImmunoSuppressants
+37939911000001109,DM+D,PrescribedImmunoSuppressants
+37940211000001108,DM+D,PrescribedImmunoSuppressants
+37940411000001107,DM+D,PrescribedImmunoSuppressants
+37941011000001107,DM+D,PrescribedImmunoSuppressants
+37949111000001107,DM+D,PrescribedImmunoSuppressants
+38079911000001105,DM+D,PrescribedImmunoSuppressants
+38080311000001109,DM+D,PrescribedImmunoSuppressants
+38096911000001109,DM+D,PrescribedImmunoSuppressants
+38097011000001108,DM+D,PrescribedImmunoSuppressants
+38588911000001105,DM+D,PrescribedImmunoSuppressants
+38896811000001103,DM+D,TakingAntiLeukotrieneOrLaba
+38897411000001103,DM+D,TakingAntiLeukotrieneOrLaba
+38897511000001104,DM+D,TakingAntiLeukotrieneOrLaba
+38897611000001100,DM+D,TakingAntiLeukotrieneOrLaba
+39110811000001105,DM+D,TakingAntiLeukotrieneOrLaba
+39111011000001108,DM+D,TakingAntiLeukotrieneOrLaba
+39111111000001109,DM+D,TakingAntiLeukotrieneOrLaba
+39111311000001106,DM+D,TakingAntiLeukotrieneOrLaba
+39112911000001101,DM+D,TakingAntiLeukotrieneOrLaba
+39113011000001109,DM+D,TakingAntiLeukotrieneOrLaba
+39113211000001104,DM+D,TakingAntiLeukotrieneOrLaba
+395278001,DM+D,PrescribedImmunoSuppressants
+400446007,DM+D,PrescribedImmunoSuppressants
+408011000001106,DM+D,TakingAntiLeukotrieneOrLaba
+408155001,DM+D,PrescribedImmunoSuppressants
+408911000001105,DM+D,TakingAntiLeukotrieneOrLaba
+4091011000001100,DM+D,PrescribedImmunoSuppressants
+4091411000001109,DM+D,PrescribedImmunoSuppressants
+410944008,DM+D,TakingAntiLeukotrieneOrLaba
+416533002,DM+D,PrescribedOralSteroids
+420966002,DM+D,PrescribedImmunoSuppressants
+422330004,DM+D,PrescribedImmunoSuppressants
+4224111000001102,DM+D,PrescribedImmunoSuppressants
+4224411000001107,DM+D,PrescribedImmunoSuppressants
+4224711000001101,DM+D,PrescribedImmunoSuppressants
+4225511000001107,DM+D,PrescribedImmunoSuppressants
+4225611000001106,DM+D,PrescribedImmunoSuppressants
+4225711000001102,DM+D,PrescribedImmunoSuppressants
+4262011000001101,DM+D,PrescribedImmunoSuppressants
+4262311000001103,DM+D,PrescribedImmunoSuppressants
+4263111000001106,DM+D,PrescribedImmunoSuppressants
+4263211000001100,DM+D,PrescribedImmunoSuppressants
+4264911000001106,DM+D,PrescribedImmunoSuppressants
+4265811000001100,DM+D,PrescribedImmunoSuppressants
+4266111000001101,DM+D,PrescribedImmunoSuppressants
+4266211000001107,DM+D,PrescribedImmunoSuppressants
+4338011000001102,DM+D,PrescribedImmunoSuppressants
+4338311000001104,DM+D,PrescribedImmunoSuppressants
+4346311000001104,DM+D,PrescribedImmunoSuppressants
+4372611000001109,DM+D,PrescribedImmunoSuppressants
+4373811000001100,DM+D,TakingAntiLeukotrieneOrLaba
+4377811000001106,DM+D,PrescribedImmunoSuppressants
+4378111000001103,DM+D,TakingAntiLeukotrieneOrLaba
+4391311000001103,DM+D,PrescribedImmunoSuppressants
+4400311000001102,DM+D,PrescribedImmunoSuppressants
+4403411000001101,DM+D,PrescribedImmunoSuppressants
+4405111000001107,DM+D,PrescribedImmunoSuppressants
+4427911000001106,DM+D,PrescribedImmunoSuppressants
+4438211000001101,DM+D,PrescribedImmunoSuppressants
+4438411000001102,DM+D,PrescribedImmunoSuppressants
+4438711000001108,DM+D,PrescribedImmunoSuppressants
+4438911000001105,DM+D,PrescribedImmunoSuppressants
+4439211000001106,DM+D,PrescribedImmunoSuppressants
+4439411000001105,DM+D,PrescribedImmunoSuppressants
+4439711000001104,DM+D,PrescribedImmunoSuppressants
+4439911000001102,DM+D,PrescribedImmunoSuppressants
+4440211000001103,DM+D,PrescribedImmunoSuppressants
+4440411000001104,DM+D,PrescribedImmunoSuppressants
+4440711000001105,DM+D,PrescribedImmunoSuppressants
+4452911000001108,DM+D,PrescribedImmunoSuppressants
+4511911000001100,DM+D,PrescribedImmunoSuppressants
+4512211000001102,DM+D,PrescribedImmunoSuppressants
+4515611000001109,DM+D,PrescribedImmunoSuppressants
+4520311000001101,DM+D,PrescribedImmunoSuppressants
+453611000001102,DM+D,TakingAntiLeukotrieneOrLaba
+4562111000001109,DM+D,PrescribedImmunoSuppressants
+4564711000001100,DM+D,PrescribedImmunoSuppressants
+456811000001107,DM+D,PrescribedImmunoSuppressants
+4580611000001104,DM+D,PrescribedImmunoSuppressants
+459611000001100,DM+D,PrescribedOralSteroids
+4745311000001105,DM+D,PrescribedImmunoSuppressants
+4773411000001103,DM+D,PrescribedImmunoSuppressants
+4835911000001107,DM+D,PrescribedImmunoSuppressants
+4839511000001102,DM+D,PrescribedImmunoSuppressants
+4880311000001105,DM+D,PrescribedImmunoSuppressants
+4881311000001100,DM+D,PrescribedImmunoSuppressants
+4897811000001103,DM+D,PrescribedImmunoSuppressants
+5007811000001106,DM+D,PrescribedImmunoSuppressants
+5183911000001104,DM+D,PrescribedImmunoSuppressants
+5235211000001101,DM+D,PrescribedImmunoSuppressants
+539811000001106,DM+D,TakingAntiLeukotrieneOrLaba
+638611000001108,DM+D,PrescribedImmunoSuppressants
+656111000001103,DM+D,PrescribedImmunoSuppressants
+660811000001100,DM+D,PrescribedImmunoSuppressants
+6741711000001104,DM+D,TakingAntiLeukotrieneOrLaba
+675711000001108,DM+D,PrescribedImmunoSuppressants
+703788008,DM+D,PrescribedImmunoSuppressants
+703791008,DM+D,PrescribedImmunoSuppressants
+703792001,DM+D,PrescribedImmunoSuppressants
+703793006,DM+D,PrescribedImmunoSuppressants
+703794000,DM+D,PrescribedImmunoSuppressants
+719811000001104,DM+D,TakingAntiLeukotrieneOrLaba
+752211000001104,DM+D,PrescribedImmunoSuppressants
+7693411000001106,DM+D,PrescribedImmunoSuppressants
+7694211000001105,DM+D,PrescribedImmunoSuppressants
+7695711000001104,DM+D,PrescribedImmunoSuppressants
+7697011000001108,DM+D,PrescribedImmunoSuppressants
+7856811000001103,DM+D,PrescribedImmunoSuppressants
+7858911000001107,DM+D,PrescribedImmunoSuppressants
+7863411000001103,DM+D,PrescribedImmunoSuppressants
+7864811000001103,DM+D,PrescribedImmunoSuppressants
+7866611000001106,DM+D,PrescribedImmunoSuppressants
+7867511000001109,DM+D,PrescribedImmunoSuppressants
+7868111000001104,DM+D,PrescribedImmunoSuppressants
+7869911000001109,DM+D,PrescribedImmunoSuppressants
+7870111000001109,DM+D,PrescribedImmunoSuppressants
+7870311000001106,DM+D,PrescribedImmunoSuppressants
+7983811000001106,DM+D,PrescribedImmunoSuppressants
+7984011000001103,DM+D,PrescribedImmunoSuppressants
+8068611000001102,DM+D,PrescribedImmunoSuppressants
+8069011000001104,DM+D,PrescribedImmunoSuppressants
+8076911000001104,DM+D,PrescribedImmunoSuppressants
+8077011000001100,DM+D,PrescribedImmunoSuppressants
+8077511000001108,DM+D,PrescribedImmunoSuppressants
+8077811000001106,DM+D,PrescribedImmunoSuppressants
+809411000001102,DM+D,TakingAntiLeukotrieneOrLaba
+810211000001105,DM+D,TakingAntiLeukotrieneOrLaba
+8261711000001107,DM+D,PrescribedImmunoSuppressants
+8282011000001100,DM+D,PrescribedImmunoSuppressants
+8283911000001108,DM+D,PrescribedImmunoSuppressants
+8284111000001107,DM+D,PrescribedImmunoSuppressants
+8307811000001104,DM+D,PrescribedImmunoSuppressants
+8308411000001102,DM+D,PrescribedImmunoSuppressants
+8308511000001103,DM+D,PrescribedImmunoSuppressants
+8308811000001100,DM+D,PrescribedImmunoSuppressants
+863011000001109,DM+D,TakingAntiLeukotrieneOrLaba
+8726011000001101,DM+D,PrescribedImmunoSuppressants
+8726211000001106,DM+D,PrescribedImmunoSuppressants
+8791311000001100,DM+D,PrescribedImmunoSuppressants
+8823011000001106,DM+D,PrescribedImmunoSuppressants
+88611000001108,DM+D,PrescribedImmunoSuppressants
+892311000001104,DM+D,TakingAntiLeukotrieneOrLaba
+906711000001106,DM+D,PrescribedImmunoSuppressants
+911911000001101,DM+D,PrescribedImmunoSuppressants
+9188011000001102,DM+D,PrescribedImmunoSuppressants
+9188211000001107,DM+D,PrescribedImmunoSuppressants
+9628711000001106,DM+D,TakingAntiLeukotrieneOrLaba
+9652711000001107,DM+D,TakingAntiLeukotrieneOrLaba
+111 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABC-08 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABEMACICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABEMACICLIB + FULVESTRANT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABEMACICLIB + LETROZOLE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABIRATERONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABIRATERONE + ENZALUTAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABVD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ABVD R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AC + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ACALABRUTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ACCEPT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ACE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ACE (GERM CELL),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ACELARATE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ACTICCA-1 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ADE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ADOC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AFATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AFLIBERCEPT + CAPECITABINE + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AFLIBERCEPT + FLUOROURACIL + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AFLIBERCEPT + FU + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALECTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + BUSULFAN + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + CYCLO + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + CYCLOPHOSPHAMIDE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + CYCLOPHOSPHAMIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + FLUDARABINE  + THIOTEPA + TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + FLUDARABINE  + TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + FLUDARABINE + LEAM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + FLUDARABINE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + LEAM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALEMTUZUMAB + PENTOSTATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL CONSOLIDATION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INDUCTION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INT GDEC D INT PHIV REIND PASP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INT GUIDE A IND,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INT GUIDE B BFMCONS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INT GUIDE B INT MAINT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTENSIFICATION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTENSIFICATION MTX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERFANT 06,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERFANT 06 ADE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 AUGMENTED BFM CONSOLIDATION C,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 CONSOLIDATION A,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 DELAYED INTENSIFICATION A,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 INDUCTION A,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 INDUCTION B,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 INDUCTION C,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 MAINTENANCE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 NOPHO C,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 STANDARD BFM CONSOLIDATION B,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 STANDARD INTERIM MAINTENANCE A,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDE 2019 STANDARD INTERIM MAINTENANCE B,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL INTERIM GUIDELINES,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL MAINTENANCE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL NOPHO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL PH+VE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL R T-CELL CONSOLIDATION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL UKALL2011 TRIAL + ALL UKALL2011 INTENSFICATION MTX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL/LBL T CELL RELAPSE CONSOLIDATION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL/LBL T CELL RELAPSE INTENSIFICATION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ALL/LBL T CELL RELAPSE NECTAR CYCLOPHOSPHAMIDE ETOPOSIDE NELARABINE AND IT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML 18 PILOT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML DOWNS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML INTERIM GUIDELINES,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML MYECHILD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML RELAPSED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML RELAPSED FLA - IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML16 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML17 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML18 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AML19 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AMSACRINE + ATG + BUSULFAN + CYTARABINE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AMSACRINE + ATG + CYCLOPHOSPHAMIDE + CYTARABINE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AMSACRINE + ATG+ BUSULFAN + CYTARABINE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AMSACRINE + BUSULFAN + CYTARABINE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AMSACRINE + CYTARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ANAGRELIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ANAGRELIDE + HYDROXYCARBAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ANASTROZOLE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ANASTROZOLE + PALBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+APALUTAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+APML,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ARIEL 4 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ARISTOTLE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ARSENIC TRIOXIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ARSENIC TRIOXIDE + ATRA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ARSENIC TRIOXIDE + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ASCIMINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ASPARAGINASE + CYTARABINE + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATEZOLIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATEZOLIZUMAB + BEVACIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATEZOLIZUMAB + BEVACIZUMAB + CARBOPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATEZOLIZUMAB + CARBOPLATIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATEZOLIZUMAB + NAB PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + BUSULFAN + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + BUSULFAN + FLUDARABINE + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + CYCLOPHOSPHAMIDE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + CYCLOPHOSPHAMIDE TBI ALLO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + FLUDARABINE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ATG + FLUDARABINE + THIOTEPA + TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AVAPRITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AVELUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AXITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AZACITIDINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AZACITIDINE + RUXOLITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+AZACITIDINE + VENETOCLAX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BALLAD TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BCG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEACON TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEACOP DAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEACOPP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEAM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEAM + ALEMTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEAM + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEAM R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BELLE3 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + BORTEZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + BRENTUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + CYTARABINE + ETOPOSIDE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + CYTARABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + GEMCITABINE + RITUXIMAB + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + GEMCITABINE + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + OBINUTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BENDAMUSTINE + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CAPE + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CAPE + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CAPECITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CARBO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CARBO + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CARBO + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CARBO + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CARBOPLATIN + NAB-PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CARBOPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + CISPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + IRINOTECAN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + IRINOTECAN + OXALIPLATIN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + IRINOTECAN + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + OXALIPLATIN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEVACIZUMAB + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BEXAROTENE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BICALUTAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BICALUTAMIDE + GOSERELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BICALUTAMIDE + LEUPRORELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BICALUTAMIDE + TAMOXIFEN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BINIMETINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BINIMETINIB + ENCORAFENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CARBOPLATIN + CISPLATIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CARBOPLATIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CISPLATIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CISPLATIN + ETOPOSIDE + METHOTREXATE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CISPLATIN + ETOPOSIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CISPLATIN + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CISPLATIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + GEMCITABINE + METHOTREXATE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + GEMCITABINE + METHOTREXATE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + GEMCITABINE + RITUXIMAB + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + GEMCITABINE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + GEMCITABINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + METHOTREXATE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + MITOXANTRONE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + CYCLOPHOSPHAMIDE + GEMCITABINE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + OXALIPLATIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLEOMYCIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BLINATUMOMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BOP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + CISPLATIN + CYCLOPHOSPHAMIDE + DOXORUBICIN + ETOPOSIDE + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + DA-EPOCH-R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + DARATUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + PANOBINOSTAT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + PANOBINOSTAT + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + PREDNISOLONE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMIB + VENETOCLAX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BORTEZOMOB + POMALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BOSTON TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BOSUTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BRENTUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BRIGATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + CYCLOPHOSPHAMIDE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + CYCLOPHOSPHAMIDE + FLUDARABINE  + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + FLUDARABINE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULFAN + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULPHAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+BUSULPHAN + CYCLO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CABAZITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CABAZITAXEL + CARBOPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CABOZANTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CALYPSO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAM-PLEX TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAMELLIA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CANTATA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAP + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPE + CARBOPLATIN + CETUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPE + CETUXIMAB + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPE + OXALIPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CARBOPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CARBOPLATIN + EPIRUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CARBOPLATIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CARBOPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CETUXIMAB + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CETUXIMAB + OXALIPATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CETUXIMAB + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CISPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CISPLATIN + EPIRUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CISPLATIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CISPLATIN + STREPTOZOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + CISPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + EPIRUBICIN + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + IRINOTECAN + PANITUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + LAPATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + MITOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + MITOMYCIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + NERATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + OXALIPLATIN + PANITUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + OXALIPLATIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + OXALIPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + STREPTOZOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPECITABINE + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAPITAL TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBO + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBO + ETOPOSIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBO + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBO + GEMCITABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBO + LIPOSOMAL DOX + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBO + THIOTEPA + TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CETUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CETUXIMAB + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CETUXIMAB + FU,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLO + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLOPHOSPHAMIDE + DOXORUBICIN  + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLOPHOSPHAMIDE + EPIRUBICIN  + FLUOROURACIL + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLOPHOSPHAMIDE + EPIRUBICIN  + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLOPHOSPHAMIDE + EPIRUBICIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLOPHOSPHAMIDE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYCLOPHOSPHAMIDE + ETOPOSIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYTARABINE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + CYTARABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DACARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DOCETAXEL + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DOCETAXEL + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + DOXORUBICIN  + MITOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + EPIRUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + EPIRUBICIN + ETOPOSIDE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + EPIRUBICIN + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + EPIRUBICIN + METHOTREXATE + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + EPIRUBICIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + IFOSFAMIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + IFOSFAMIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + ETOPOSIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + FLUOROURACIL + STREPTOZOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + FLUOROURACIL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + LIPOSOMAL DOX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + NAB-PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + NAB-PACLITAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + PACLITAXEL + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + PACLITAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + PEMBROLIZUMAB + PEMETREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + PEMETREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + PROCARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + TEYSUNO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + THIOTEPA + TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARBOPLATIN + VINORELBINE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARDAMON TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARFILZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARFILZOMIB + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARFILZOMIB + CYCLOPHOSPHAMIDE + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARFILZOMIB + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARFILZOMIB + POMALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARMUSTINE + CYCLOPHOSPHAMIDE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CARMUSTINE + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CASPS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CAV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CCEP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CCISV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CEDIRANIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CEMIPLIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CERITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + CISPLATIN + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + CISPLATIN + FU,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + IRINOTECAN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + IRINOTECAN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + OXALIPLATIN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + OXALIPLATIN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CETUXIMAB + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CEV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + DEXAMETHASONE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + DOXORUBICIN  + ETOPOSIDE + PROCARBAZINE + VINBLASTINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + ETOPOSIDE + LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + ETOPOSIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + OBINUTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + OFATUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLORAMBUCIL + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLVPP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLVPP/EVA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHLVPP/PABLOE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOEP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP + BORTEZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP + INTERFERON ALFA + ZIDOVUDINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP + OBINUTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP R + BORTEZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP R + LIPOSOMAL DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP R + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP-R + CYTARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CHOP-R + CYTARABINE HIGH DOSE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYCLO + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYCLOPHOSPHAMIDE + CYTARABINE + DOXORUBICIN + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYCLOPHOSPHAMIDE + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYCLOPHOSPHAMIDE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYCLOPHOSPHAMIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + CYTARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DACARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DACARBAZINE + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DACTINOMYCIN + ETOPOSIDE + FILGRASTIM + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DACTINOMYCIN + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOCETAXEL + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOX + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOX + ETOPOSIDE + MITOTANE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOXORUBICIN  + IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOXORUBICIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOXORUBICIN + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + DOXORUBICIN + METHOTREXATE + MIFAMURTIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + EPIRUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + EPIRUBICIN + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + ETOPOSIDE + IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + ETOPOSIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + ETOPOSIDE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + FLUORO + STREPTOZOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + FLUOROURACIL + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + FLUOROURACIL + STREPTOZOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + FLUOROURACIL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + FU + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + GEMCITABINE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + GEMCITABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + IFOSFAMIDE + MESNA + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + IFOSFAMIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + IMATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + LIPOSOMAL DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + LOMUSTINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + NAB-PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + PEMBROLIZUMAB + PEMETREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + PEMETREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + RALTITREXED + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + TEYSUNO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CISPLATIN + VINORELBINE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLADRIBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLADRIBINE + CYCLOPHOSPHAMIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLADRIBINE + CYTARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLADRIBINE + CYTARABINE + DAUNORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLADRIBINE + CYTARABINE + IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLADRIBINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLARITY TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLL210 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLODRONIC ACID,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLOFARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLOFARABINE + CYCLOPHOSPHAMIDE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLOFARABINE + CYTARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CLOFARABINE + CYTSARABINE + IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CMF,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CMV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS ATRT DOXORUBICIN/IFOSFAMIDE/CARBOPLATIN/ETOPOSIDE/METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS EPEN2007,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS EPENDYMOMA 99 VINC+CYCLO+ETOP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS EPENDYMOMA II,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS GERM CELL TUMOUR II - NON GERMINOMATOUS - STANDARD PEI,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS HGG CISPLATIN/ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS HR MBL CYCLO/VINC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS MEDBL HR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS MEDBL ST RISK <3YRS INDUCTION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CNS SIOP 2009,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COBIMETINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CODOX M,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CODOX M + IVAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COLUMBUS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COMBI-AD TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COMPARE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COMPLEEMENT-1 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COMPLEMENT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CONCEPT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CONFIRM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COPP + DACARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+COSMIC TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CREATE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CRIZOTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CTD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVAD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVD (NEUROENDOCRINE),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVD + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVD R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVP + OBINUTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVP R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVP R + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CVP R + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLET,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + DOXORUBICIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + DOXORUBICIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + ETOPOSIDE + NELARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + ETOPOSIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + FLUDARABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLO + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSHAMIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + CYTARABINE + DAUNORUBICIN + MERCAPTOPURINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + CYTARABINE + DOXORUBICIN + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + CYTARABINE + ETOPOSIDE + METHOTREXATE + NELARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + CYTARABINE + MERCAPTOPURINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + CYTARABINE + MERCAPTOPURINE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + CYTARABINE + POMALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DACARBAZINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DACTINOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DACTINOMYCIN + DOXORUBICIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DACTINOMYCIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + DOXORUBICIN  + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + DOXORUBICIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + EPIRUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + EPIRUBICIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN  + METHOTREXATE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN  + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN + ETOPOSIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN + METHOTREXATE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN + PROCARBAZINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + DOXORUBICIN + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + EPIRUBICIN  + FLUOROURACIL + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + LOMUSTINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + NELARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + PROCARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + PROCARBAZINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + ETOPOSIDE + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + FLUDARABINE + MITOXANTRONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + FLUDARABINE + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + FLUOROURACIL + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + FLUOROURACIL + METHOTREXATE + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + GEMCITABINE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + GEMCITABINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + IXAZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + LIPOSOMAL DOX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + MITOXANTRONE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + MTX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + NAB-PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + RITUXIMAB + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + RITUXIMAB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + THALIDOMIDE + DEXAMETHASONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYCLOPHOSPHAMIDE HIGH DOSE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYPROTERONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYPROTERONE + GOSERELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + DAUNORUBICIN + GEMTUZUMAB OZOGAMICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + ETOPOSIDE + IFOSFAMIDE + METHOTREXATE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + ETOPOSIDE + IMATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + ETOPOSIDE + MITOXANTRONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + ETOPOSIDE + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + FLUDARABINE + IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + FLUDARABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + GEMTUZUMAB OZOGAMICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + IDARUBICIN + METHOTREXATE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + MERCAPTOPURINE + METHOTREXATE + PEGASPARAGINASE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + METHOTREXATE + PEGASPARAGINASE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + METHOTREXATE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + METHOTREXATE + RITUXIMAB + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + METHOTREXATE HD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + MIDOSTAURIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + OXALIPLATIN + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE HD + METHOTREXATE HD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE HIGH DOSE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE INTRATHECAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+CYTARABINE IT + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DA-EPOCH,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DA-EPOCH + BORTEZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DABRAFENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DABRAFENIB + TRAMETINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACARBAZINE + DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACARBAZINE + DOXORUBICIN + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACARBAZINE + DOXORUBICIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACARBAZINE + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACOMITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN + CYCLO + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN + DOXORUBICIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN + ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN + ETOPOSIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN + IFOSFAMIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DACTINOMYCIN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DARATUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DARATUMUMAB + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DARATUMUMAB + POMALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DARBEPOETIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DASATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DAUNORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DAUNORUBICIN + CYTARABINE + MIDOSTAURIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DAUNORUBICIN + METHOTREXATE + PEGASPARAGINASE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DAUNORUBICIN + PEGASPARAGINASE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DAUNORUBICIN + VNCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DE ANGELIS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DECITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DEGARELIX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DENOSUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DENOSUMAB + ERIBULIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DEPATUXIZUMAB MAFODOTIN + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DHAP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DHAP - R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DICE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DINUTUXIMAB BETA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOCETAXEL + FLUOROURACIL + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOCETAXEL + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOCETAXEL + NINTEDANIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOCETAXEL + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + HD MTX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + IFOSFAMIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + METHOTREXATE + MIFAMURTIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + OLARATUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + PEGASPARGASE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN + STEPTOZOTOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DOXORUBICIN EMBOLISATION,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DTPACE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+DURVALUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EC + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EC + DOCETAXEL + PERTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EC + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EC + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EC + PACLITAXEL + PERTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ECARBOF,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ECARBOX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ECF,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ECX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EDP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EDP + MITOTANE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ELOQUENT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ELOQUENT2 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ELOTUZUMAB + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EMA/CO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ENCORAFENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ENRICH TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ENZALUTAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ENZARAD TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EOF,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EOX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EP/EMA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPIRUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPIRUBICIN + FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPIRUBICIN + FLUOROURACIL + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPIRUBICIN + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPIRUBICIN + OXALIPLATIN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPIRUBICIN INTRAVESICULAR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EPSSG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ERDAFITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ERIBULIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ERIBULIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ERLOTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ERWINIA ASPARAGINASE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ESCALATED BEACOP DAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ESHAP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ESHAP R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ESPAC TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ESTRAMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + IFOSFAMIDE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + IFOSFAMIDE + MTX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + IFOSFAMIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + IFOSFAMIDE + RITUXIMAB + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + LOMUSTINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ETOPOSIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EURAMOS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EURO-EWING,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EVEROLIMUS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EVEROLIMUS + EXEMESTANE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EVEROLIMUS + LENVATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EW REL REECUR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EW REL REECUR IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EXEMESTANE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+EXEMESTANE + PALBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FAB LMB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FAKTION TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FBC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FCARBOST,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FCIST,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FCR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC + DOCETAXEL + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC + PACLITAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC 100,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC 100 + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC 100 + DOCETAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC 100 + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC 60 OR 75,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FEC 60 OR 75 + DOCETAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FIGARO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLAG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLAG + IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLAIR TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUDARABINE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUDARABINE + THIOTEPA + TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + INTERFERON ALFA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + IRINOTECAN + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + MITOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + MITOMYCIN + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + OXALIPLATIN + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + PANITUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FLUOROURACIL + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FMD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FOCUS4 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FORODESINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FOXFIRE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FULVESTRANT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FULVESTRANT + PALBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+FURVA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+G-CVP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GCLAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GDCVP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GDP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GDP R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEFITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GELOX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCARBO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + IFOSFAMIDE + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + NAB-PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + OXALIPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + OXALIPLATIN + PEGASPARAGINASE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + OXALIPLATIN + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + RITUXIMAB + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + TEGAFUR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + TIP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + TREOSULPHAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMCITABINE + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GEMTUZUMAB OZOGAMICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GILTERITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GOSERELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GOSERELIN + LETROZOLE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GOSERELIN + LEUPRORELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+GOSERELIN + PALBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HCX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HD EURONET-PHL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HD EURONET-PHL-C2 COPDAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HD EURONET-PHL-C2 DECOPDAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HD EURONET-PHL-C2 OEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HELIOS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HEPATOBLASTOMA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HERBY TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HLH CONSOL ETOP/DEXAMTHASONE/CICLOSPORIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HLH INDUCTION W3-8 ETOPOSIDE/DEXAMETHASONE/CICLOSPORIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HORMONESÂ ,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+HYDROXYCARBAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IBANDRONIC ACID,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IBRITUMOMAB TIUXETAN + RITUXIMAB + Y90,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IBRUTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IBRUTINIB + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IBRUTINIB + VENETOCLAX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ICE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ICE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ICE-R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ICON TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ICON8B TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ICON9 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARAM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN + IMATINIB + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN + MERCAPTOPURINE + METHOTREXATE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN + METHOTREXATE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN + MITOXANTRONE + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDARUBICIN + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDELALISIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IDELALISIB + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IFOSFAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IFOSFAMIDE + LIPOSOMAL DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IFOSFAMIDE + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IFOSFAMIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IGEV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IGEV R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IMATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IMATINIB + HYDROXYCARBAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IMATINIB + MERCAPTOPURINE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IMATINIB + MERCAPTOPURINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IMMUNOGLOBULIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INCA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INOTUZUMAB OZOGAMICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INTERAACT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INTERFERON,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INTERFERON ALFA + ZIDOVUDINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INTERFERON BETA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INTERIM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+INTERLACE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IPILIMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IPILIMUMAB + NIVOLUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IPILIMUMAB + PEMBROLIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IPM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IPO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN  + OXALIPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN  + PANITUMUMAB + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN  + TEMOZOLOMIDE + DINUTUXIMAB BETA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN  + TEMOZOLOMIDE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + BEVACIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + MDG + PANITUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + MITOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + OXALIPLATIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + PANITUMUMAB + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + TALAZOPARIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IRINOTECAN + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IVA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IVAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IVADO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IVE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IVE-R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IVOSIDENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IXAZOMIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IXAZOMIB + LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+IXAZOMIB + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+KESTREL TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+KYMRIAH + FLUDARABINE + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LACE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LANREOTIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LAPATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LATITUDE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LEAM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LENALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LENALIDOMIDE + DARATUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LENALIDOMIDE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LENVATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LETROZOLE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LETROZOLE + PALBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LETROZOLE + RIBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LEUPRORELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LI-1 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LIPOSOMAL DAUNORUBICIN + CYTARABINE (VYXEOS),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LIPOSOMAL DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LIPOSOMAL DOXORUBICIN + PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LOMUSTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LOMUSTINE + PROCARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LOMUSTINE + PROCARBAZINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LOMUSTINE + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LOPP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LORLATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LU-177,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LURBINECTIDIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+LUTETIUM-177,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MACE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MANTA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MAP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MAP + MIFAMURTIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MASITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MATRIX TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MCX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MEAD (PEG-ASPARAGINASE),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MEDROXYPROGESTERONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MEGESTROL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MELPHALAN + THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MELPHALAN + TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MEOC TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MERCAPTOPURINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MERCAPTOPURINE + METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MERCAPTOPURINE + METHOTREXATE + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MERCAPTOPURINE + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MERCAPTOPURINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METAPHER TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + MITOMYCIN + MITOXANTRONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + PEGASPARGASE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + PROCARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + PROCARBAZINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + RITUXIMAB + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE HD + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE HIGH DOSE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE HIGH DOSE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+METHOTREXATE INTRATHECAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MIC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MIDAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MIDOSTAURIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MIFAMURTIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MILLENNIUM C16021 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MITOMYCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MITOMYCIN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MITOMYCIN INTRAVESICULAR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MITOTANE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MITOXANTRONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MITOXANTRONE + TRETINOIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MMM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MPT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MPV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MTX HD + PROCARBAZINE + VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MUK 11 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MUK 12 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MUK 9 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MUK6 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MUK7 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MUK8 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MVAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MVCARBO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MYELOMA XI TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+MYELOMA XII TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NAB-PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NAB-PACLITAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NB 13 CIS-RA (ISOTRETINOIN),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NELARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NEMO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NEO-AEGIS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NEOBLADE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NEPTUNE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NERATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NHL 2003,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NILOTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NIMRAD TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NINTEDANIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NIRAPARIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NIVOLUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+NORDIC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OBINUTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OCTOPUS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OCTREOTIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OFATUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OLAPARIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OLARATUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OLYMPIA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OPTIMAL TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OSIMERTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OXALIPLATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OXALIPLATIN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OXALIPLATIN + MDG + PANITUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+OXALIPLATIN + RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PAC-E,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACE-BOM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACIFICO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACKER INDUCTION VINCRISTINE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACKER MAINTENANCE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACLITAXEL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACLITAXEL + BEVACIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACLITAXEL + PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACLITAXEL + RAMUCIRUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACLITAXEL + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PACRITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PAD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PAKT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PALBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PALLET TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PAMIDRONATE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PANITUMUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PANOBINOSTAT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PANTHER TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PARAGON TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PARTNER TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PATHOS TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PAZ02 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PAZOPANIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PCV,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PEG INTERFERON,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PEI,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PEMBROLIZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PEMBROLIZUMAB + PEMETREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PEMETREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PENTOSTATIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PENTOSTATIN + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PERM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PERTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PERTUZUMAB + TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PETREA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT C CARBOPLATIN/DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT C CDDP-M,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT D CARBOPLATIN/DOXORUBICIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT D2 CARBOPLATIN / ETOPOSIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT D3 VINCRISTINE / IRINOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT E2 PLADO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PHITT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PIN TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PIXANTRONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PLATFORM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PLATO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PMITCEBO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PMITCEBO R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PMITCEBO-R,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+POLEM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+POMALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+POMB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+POMB/ACE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PONATINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+POUT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PREDNISOLONE + VINBLASTINE + RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PRIMUS 002 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PRISM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PROCAID TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PROCARBAZINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PROGESTERONE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PROMISE-MESO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+PVD,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+QUADRUPLE INTRATHECAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+QUASAR 2 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+QUIZARTINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R CODOX M,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R CODOX-M/ R IVAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R IVAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R-CHOEP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R-CHOP / R-DHAP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R-EPOCH,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R-GEM-P,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+R-PCE2BO (ETOPOPHOSÃÂ¿Â½),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RADIUM 223,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RALTITREXED,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RAMUCIRUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RATHL TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RCD TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RCEOP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RE-AKT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+REBEL TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+REGORAFENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RETINOBLASTOMA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RIALTO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RIBOCICLIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RITUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RITUXIMAB + TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RITUXIMAB + VENETOCLAX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RITUXIMAB + VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RMS 2005 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ROMAZA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ROMICAR TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ROSCO TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ROVALPITUZUMAB TESIRINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RPACE-BOM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+RUXOLITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SCALOP-2 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SCOPE 1 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SCOPE2 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SELINEXOR,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SELPAC TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SHAMASH LBCMVD-56,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SHINE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SILTUXIMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SIOP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SIROLIMUS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SMILE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SOLO1 TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SOPHIA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SORAFENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SPANISH MAINTENANCE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SPIRE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SPIRIT TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STAMPEDE TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STAR TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STILBOESTROL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STREPTOZOCIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STREPTOZOCIN + MDG,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STS NON- RHABDO EPSSG VINBLASTINE/MTX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STS NON-RHABDO EPSSG 2005 IFOS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STS NON-RHABDO EPSSG 2005 VA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STS RHABDO RMS 2005,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+STS RHABDO VIT0910,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+SUNITINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TAC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TALAZOPARIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TALIMOGENE LAHERPAREPVEC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TAMOXIFEN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TEMOZOLOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TEMOZOLOMIDE + RT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TEMSIROLIMUS,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TEYSUNO,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+THALIDOMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TIMELY TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TIP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TIPIFARNIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TIVOZANIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TOPARP TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TOPOTECAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRABECTEDIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRAMETINIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT ALEMTUZUMAB + CYCLOPHOSPHAMIDE + FLUDARABINE (+/- TBI),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT ALEMTUZUMAB + CYTARABINE + ETOPOSIDE + LOMUSTINE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT ALEMTUZUMAB + FLUDARABINE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT AMSACRINE + ANTITHYMOCYTE IMMUNOGLOBULIN (RABBIT) + BUSULFAN + CYCLOPHOSPHAMIDE + CYTARABINE + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT ATG + BUSULFAN + FLUDARABINE + THIOTEPA,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT ATG + ETOPOSIDE (+/- TBI),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT ATG + FLUDARABINE + THIOTEPA + TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT BEAM,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT BUSULFAN + FLUDARABINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT CYCLOPHOSPHAMIDE + FLUDARABINE (+/- TBI),Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT CYTARABINE + ETOPOSIDE + LOMUSTINE + MELPHALAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRANSPLANT FLUDARABINE + THIOTEPA + TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRASTUZUMAB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRASTUZUMAB + VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRASTUZUMAB EMTANSINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TREOSULFAN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRIFLURIDINE + TIPIRACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRIFLURIDINE TIPIRACIL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRIPLE INTRATHECAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+TRIPTORELIN,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALL 60+ TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALL XII,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALL2003,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALL2011,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALL2014,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALL60+,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UKALLR3,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+UNIRAD TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VAI,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VANDETANIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VDC,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VDT-PACE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VEDEX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VELIPARIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VEMURAFENIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VENETOCLAX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VEPEMB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VIM TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VINBLASTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VINCRISTINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VINORELBINE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VIOLA TRIAL,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VIP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VISMODEGIB,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+VORINOSTAT,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+WILMS REL ICE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+WT RELAPSE CARBO/CYCLO/ETOP,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+WT2001,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+XILONIX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+YESCARTA + FLUDARABINE + CYCLOPHOSPHAMIDE,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+YTTRIUM-90,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+Z-DEX,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+ZOLEDRONIC ACID,Chemotherapy Treatment Benchmark Group,ChemotherapyGroup
+"""
+
+#tmp_codelist_Qcovid_part1 = spark.createDataFrame(pd.DataFrame(pd.read_csv(io.StringIO(tmp_codelist_Qcovid_part1))))
+#tmp_codelist_Qcovid_part2 = spark.createDataFrame(pd.DataFrame(pd.read_csv(io.StringIO(tmp_codelist_Qcovid_part2))))
+#tmp_codelist_Qcovid = tmp_codelist_Qcovid_part1 + tmp_codelist_Qcovid_part2
+codelist_qcovid_1 = (
+  spark.createDataFrame(pd.DataFrame(pd.read_csv(io.StringIO(codelist_qcovid_1))))
+  .withColumnRenamed('QCovid_item', 'name')
+  .withColumnRenamed('code_type', 'terminology')
+)
+
+# COMMAND ----------
+
+# MAGIC %md # 3. Check
+
+# COMMAND ----------
+
+# check
+display(codelist_qcovid_1)
+
+# COMMAND ----------
+
+# check
+display(codelist_qcovid_1.where(f.col('name').rlike('SolidOrganTransplant')).orderBy('name', 'code'))
+
+# COMMAND ----------
+
+# check
+count_varlist(codelist_qcovid_1, ['name', 'terminology', 'code']); print()
+tmpt = tab(codelist_qcovid_1, 'name', 'terminology'); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 4. Exclude duplicates
+
+# COMMAND ----------
+
+# check
+count_varlist(codelist_qcovid_1, ['name', 'terminology', 'code']); print()
+
+# identify duplicates
+win_ord = Window\
+  .partitionBy('name', 'terminology', 'code')\
+  .orderBy('mono_id')
+win = Window\
+  .partitionBy('name', 'terminology', 'code')
+codelist_qcovid_1 = (
+  codelist_qcovid_1
+  .withColumn('mono_id', f.monotonically_increasing_id())
+  .withColumn('rownum', f.row_number().over(win_ord))
+  .withColumn('rownummax', f.count('name').over(win))
+)
+
+# check 
+tmpt = tab(codelist_qcovid_1.where(f.col('rownum') == 1), 'rownummax'); print()
+print(codelist_qcovid_1.where(f.col('rownummax') > 1).toPandas().to_string()); print()
+
+# filter
+codelist_qcovid_2 = (
+  codelist_qcovid_1
+  .where(f.col('rownum') == 1)
+  .drop('rownum', 'rownummax')
+)
+
+# check
+count_varlist(codelist_qcovid_2, ['name', 'terminology', 'code']); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 5. Exclude terminologies
+
+# COMMAND ----------
+
+# check
+count_varlist(codelist_qcovid_2, ['name', 'terminology', 'code']); print()
+tmpt = tab(codelist_qcovid_2, 'name', 'terminology'); print()
+
+# filter
+## PL note: removed chemotherapy treatment benchmark group and Read2 codes
+codelist_qcovid_3 = (
+  codelist_qcovid_2
+  .where((f.col('terminology') != 'Chemotherapy Treatment Benchmark Group') & (f.col('terminology') != 'Read2'))
+)
+
+# check
+count_varlist(codelist_qcovid_3, ['name', 'terminology', 'code']); print()
+tmpt = tab(codelist_qcovid_3, 'name', 'terminology'); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 5b. Exclude names
+
+# COMMAND ----------
+
+# GC advised to exclude:
+# - Ethnicity (not appropriate for QCovid risk score)
+# - HousingCategory (none of the SNOMED codes are available in GDPPR)
+# - LearningDisabilityOrDownsSyndrome (** check rationale **)
+#   - 20230302. Checked with GC. Include.
+
+# check
+count_varlist(codelist_qcovid_3, ['name']); print()
+count_varlist(codelist_qcovid_3, ['name', 'terminology', 'code']); print()
+tmpt = tab(codelist_qcovid_3, 'name', 'terminology'); print()
+
+# filter
+codelist_qcovid_3b = (
+  codelist_qcovid_3
+  .where(~f.col('name').isin(['Ethnicity', 'HousingCategory']))
+)
+
+# check
+count_varlist(codelist_qcovid_3b, ['name']); print()
+count_varlist(codelist_qcovid_3b, ['name', 'terminology', 'code']); print()
+tmpt = tab(codelist_qcovid_3b, 'name', 'terminology'); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 6. Recode terminology
+
+# COMMAND ----------
+
+# check
+tmpt = tab(codelist_qcovid_3b, 'terminology'); print()
+
+# recode
+codelist_qcovid_4 = (
+  codelist_qcovid_3b
+  .withColumn('terminology', 
+              f.when(f.col('terminology') == 'DM+D', 'DMD')
+              .when(f.col('terminology') == 'OPCS', 'OPCS4')
+              .otherwise(f.col('terminology')))
+)
+
+# check
+tmpt = tab(codelist_qcovid_4, 'terminology'); print()
+
+# check
+list_terminology = list(
+  codelist_qcovid_4\
+    .select('terminology')\
+    .distinct()\
+    .toPandas()['terminology']
+  )
+print(list_terminology)
+assert set(list_terminology) <= set(['ICD10', 'OPCS4', 'SNOMED', 'DMD'])
+
+# COMMAND ----------
+
+# DBTITLE 1,Temp save
+codelist_qcovid_4 = temp_save(df=codelist_qcovid_4, out_name=f'{proj}_tmp_codelist_qcovid_4')
+
+# COMMAND ----------
+
+# MAGIC %md # 7. Reformat codes
+
+# COMMAND ----------
+
+# DBTITLE 1,Read temp file
+codelist_qcovid_4 = spark.table(f'{dbc}.{proj}_tmp_codelist_qcovid_4')
+
+# COMMAND ----------
+
+# remove trailing X's, decimal points, dashes, and spaces
+codelist_qcovid_5 = (
+  codelist_qcovid_4
+  .withColumn('_code_old', f.col('code'))
+  .withColumn('code', f.when(f.col('terminology') == 'ICD10', f.regexp_replace('code', r'X$', '')).otherwise(f.col('code')))\
+  .withColumn('code', f.when(f.col('terminology') == 'ICD10', f.regexp_replace('code', r'[\.\-\s]', '')).otherwise(f.col('code')))
+  .withColumn('_code_diff', f.when(f.col('code') != f.col('_code_old'), 1).otherwise(0))
+)
+
+# check
+tmpt = tab(codelist_qcovid_5, '_code_diff'); print()
+print(codelist_qcovid_5.where(f.col('_code_diff') == 1).orderBy('name', 'terminology', 'code').toPandas().to_string()); print()
+
+# tidy
+codelist_qcovid_5 = (
+  codelist_qcovid_5
+  .drop('_code_old', '_code_diff')
+)
+
+# check 
+print(codelist_qcovid_5.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 8. Exclude duplicates 2
+
+# COMMAND ----------
+
+# exclude duplicates 2 introduced by reformat codes
+
+# check
+count_varlist(codelist_qcovid_5, ['name', 'terminology', 'code']); print()
+
+# identify duplicates
+win_ord = Window\
+  .partitionBy('name', 'terminology', 'code')\
+  .orderBy('mono_id')
+win = Window\
+  .partitionBy('name', 'terminology', 'code')
+codelist_qcovid_5 = (
+  codelist_qcovid_5
+  .withColumn('rownum', f.row_number().over(win_ord))
+  .withColumn('rownummax', f.count('name').over(win))
+)
+
+# check 
+tmpt = tab(codelist_qcovid_5.where(f.col('rownum') == 1), 'rownummax'); print()
+print(codelist_qcovid_5.where(f.col('rownummax') > 1).toPandas().to_string()); print()
+
+# filter
+codelist_qcovid_6 = (
+  codelist_qcovid_5
+  .where(f.col('rownum') == 1)
+  .drop('rownum', 'rownummax')
+)
+
+# check
+count_varlist(codelist_qcovid_6, ['name', 'terminology', 'code']); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 9. Exclude codes / add term
+
+# COMMAND ----------
+
+# exclude invalid codes or codes not available in the TRE
+# add term (code description)
+
+# COMMAND ----------
+
+# MAGIC %md ## 9.1. SNOMED
+
+# COMMAND ----------
+
+# filter to SNOMED
+codelist_qcovid_6_snomed = (
+  codelist_qcovid_6
+  .where(f.col('terminology').isin(['SNOMED']))
+)
+tmpt = tab(codelist_qcovid_6_snomed, 'terminology'); print()
+
+# refset
+gdppr_refset_1 = (
+  gdppr_refset
+  .select(f.col('ConceptId').alias('code'), f.col('ConceptId_Description').alias('term'))
+  .dropDuplicates(['code'])
+)
+
+# merge
+codelist_qcovid_6_snomed_1 = merge(codelist_qcovid_6_snomed, gdppr_refset_1, ['code'], validate='m:1', keep_results=['both', 'left_only'], indicator=1); print()
+
+# check
+tmpt = tab(codelist_qcovid_6_snomed_1, 'name', '_merge'); print()
+print(codelist_qcovid_6_snomed_1.where(f.col('_merge') == 'left_only').orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# filter
+codelist_qcovid_6_snomed_2 = (
+  codelist_qcovid_6_snomed_1
+  .where(f.col('_merge') == 'both')
+  .drop('_merge')
+)
+
+# check
+tmpt = tab(codelist_qcovid_6_snomed_2, 'name'); print()
+print(codelist_qcovid_6_snomed_2.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md ## 9.2. DMD
+
+# COMMAND ----------
+
+# check both gdppr and pmeds
+
+# gdppr refset
+gdppr_refset_1 = (
+  gdppr_refset
+  .select(f.col('ConceptId').alias('code'), f.col('ConceptId_Description').alias('term'))
+  .dropDuplicates(['code'])
+)
+
+# pmeds
+pmeds_prepared_1 = (
+  pmeds_prepared
+  .withColumnRenamed('term', 'term_pmeds')
+)
+
+# merge
+gdppr_pmeds_refset = merge(gdppr_refset_1, pmeds_prepared_1, ['code'], validate='1:1'); print()
+
+# add clear indicator
+gdppr_pmeds_refset = (
+  gdppr_pmeds_refset
+  .withColumn('in_gdppr_pmeds',
+              f.when(f.col('_merge') == 'both', 'both')
+              .when(f.col('_merge') == 'left_only', 'gdppr')
+              .when(f.col('_merge') == 'right_only', 'pmeds')
+             )
+  .drop('_merge')
+)
+
+# check
+tmpt = tab(gdppr_pmeds_refset, 'in_gdppr_pmeds'); print()
+print(gdppr_pmeds_refset.limit(10).toPandas().to_string()); print()
+# display(gdppr_pmeds_refset.where(f.col('_merge') == 'both'))
+
+# COMMAND ----------
+
+display(gdppr_pmeds_refset.where((f.lower(f.col('term')).rlike('tacrolimus 1mg modified-release capsules')) | (f.lower(f.col('term_pmeds')).rlike('tacrolimus 1mg modified-release capsules')))) 
+# 11619411000001105 - Tacrolimus 1mg modified-release capsules 50 capsule (product)
+# 11619511000001109 - Tacrolimus 1mg modified-release capsules 100 capsule (product)
+# 11649511000001103 - Tacrolimus 1mg modified-release capsules (product)
+# pemds have different codes with capsule amounts
+
+# COMMAND ----------
+
+# filter to DMD
+codelist_qcovid_6_dmd = (
+  codelist_qcovid_6
+  .where(f.col('terminology').isin(['DMD']))
+)
+tmpt = tab(codelist_qcovid_6_dmd, 'terminology'); print()
+
+# merge
+codelist_qcovid_6_dmd_1 = merge(codelist_qcovid_6_dmd, gdppr_pmeds_refset, ['code'], validate='m:1', keep_results=['both', 'left_only'], indicator=1); print()
+
+# check
+tmpt = tab(codelist_qcovid_6_dmd_1, 'name', '_merge'); print()
+tmpt = tab(codelist_qcovid_6_dmd_1, 'name', 'in_gdppr_pmeds'); print()
+tmpt = tab(codelist_qcovid_6_dmd_1, '_merge', 'in_gdppr_pmeds'); print()
+print(codelist_qcovid_6_dmd_1.where(f.col('_merge') == 'left_only').orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# no additional information being provided by pmeds
+
+# filter
+codelist_qcovid_6_dmd_2 = (
+  codelist_qcovid_6_dmd_1
+  .where(f.col('_merge') == 'both')
+  .drop('_merge')
+)
+
+# check
+tmpt = tab(codelist_qcovid_6_dmd_2, 'name'); print()
+print(codelist_qcovid_6_dmd_2.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# tidy
+codelist_qcovid_6_dmd_2 = (
+  codelist_qcovid_6_dmd_2
+  .drop('term_pmeds', 'in_gdppr_pmeds')
+)
+
+# check
+print(codelist_qcovid_6_dmd_2.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md ## 9.3. ICD10
+
+# COMMAND ----------
+
+# refset
+icd10_1 = (
+  icd10
+  .select(f.col('ALT_CODE').alias('code'), f.col('ICD10_DESCRIPTION').alias('term'))
+  .dropDuplicates(['code'])
+)
+
+# remove trailing X's, decimal points, dashes, and spaces
+icd10_2 = (
+  icd10_1
+  .withColumn('_code_old', f.col('code'))
+  .withColumn('code', f.regexp_replace('code', r'X$', ''))
+  .withColumn('code', f.regexp_replace('code', r'[\.\-\s]', ''))
+  .withColumn('_code_diff', f.when(f.col('code') != f.col('_code_old'), 1).otherwise(0))
+)
+
+# check
+tmpt = tab(icd10_2, '_code_diff'); print()
+print(icd10_2.where(f.col('_code_diff') == 1).orderBy('code').toPandas().to_string()); print()
+
+# tidy
+icd10_2 = (
+  icd10_2
+  .drop('_code_old', '_code_diff')
+)
+
+# check 
+print(icd10_2.orderBy('code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# filter to ICD10
+codelist_qcovid_6_icd10 = (
+  codelist_qcovid_6
+  .where(f.col('terminology').isin(['ICD10']))
+)
+tmpt = tab(codelist_qcovid_6_icd10, 'terminology'); print()
+
+
+# merge
+codelist_qcovid_6_icd10_1 = merge(codelist_qcovid_6_icd10, icd10_2, ['code'], validate='m:1', assert_results=['both', 'right_only'], keep_results=['both'], indicator=0); print()
+
+# check
+tmpt = tab(codelist_qcovid_6_icd10_1, 'name'); print()
+# print(codelist_qcovid_6_icd10_1.where(f.col('_merge') == 'left_only').orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# filter
+# codelist_qcovid_6_icd10_2 = (
+#   codelist_qcovid_6_icd10_1
+#   .where(f.col('_merge') == 'both')
+#   .drop('_merge')
+# )
+
+# check
+# tmpt = tab(codelist_qcovid_6_icd10_2, 'name'); print()
+# print(codelist_qcovid_6_icd10_2.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md ## 9.4. OPCS4
+
+# COMMAND ----------
+
+# refset
+opcs4_1 = (
+  opcs4
+  .select(f.col('ALT_OPCS_CODE').alias('code'), f.col('OPCS_CODE_DESC_FULL').alias('term'))
+  .dropDuplicates(['code'])
+)
+
+# remove trailing X's, decimal points, dashes, and spaces
+opcs4_2 = (
+  opcs4_1
+  .withColumn('_code_old', f.col('code'))
+  .withColumn('code', f.regexp_replace('code', r'X$', ''))
+  .withColumn('code', f.regexp_replace('code', r'[\.\-\s]', ''))
+  .withColumn('_code_diff', f.when(f.col('code') != f.col('_code_old'), 1).otherwise(0))
+)
+
+# check
+tmpt = tab(opcs4_2, '_code_diff'); print()
+print(opcs4_2.where(f.col('_code_diff') == 1).orderBy('code').toPandas().to_string()); print()
+
+# tidy
+opcs4_2 = (
+  opcs4_2
+  .drop('_code_old', '_code_diff')
+  .withColumn('len', f.length(f.col('code')))
+)
+
+# check 
+print(opcs4_2.orderBy('code').limit(10).toPandas().to_string()); print()
+
+# check
+tmpt = tab(opcs4_2, 'len'); print()
+assert opcs4_2.where(f.col('len') != 4).count() == 0
+# all length 4
+
+# create length 3
+win_ord = Window\
+  .partitionBy('code')\
+  .orderBy('_code_old')
+opcs4_len3 = (
+  opcs4_2
+  .withColumn('_code_old', f.col('code'))  
+  .withColumn('code', f.substring(f.col('code'), 1, 3))  
+  .withColumn('rownum', f.row_number().over(win_ord))
+  .where(f.col('rownum') == 1)
+  .withColumn('term', f.concat(f.lit('** first length 4 code ** '), f.col('term')))
+  .drop('rownum')
+)
+
+# combined length 4 and length 3
+opcs4_3 = (
+  opcs4_2
+  .withColumn('_code_old', f.lit(None))
+  .unionByName(opcs4_len3)
+  .drop('len')
+)
+
+# check
+count_var(opcs4_3, 'code'); print()
+print(opcs4_3.orderBy('code').limit(10).toPandas().to_string()); print()
+
+# tidy
+opcs4_3 = (
+  opcs4_3
+  .drop('_code_old', )
+)
+
+# COMMAND ----------
+
+# filter to OPCS4
+codelist_qcovid_6_opcs4 = (
+  codelist_qcovid_6
+  .where(f.col('terminology').isin(['OPCS4']))
+)
+tmpt = tab(codelist_qcovid_6_opcs4, 'terminology'); print()
+
+# merge
+codelist_qcovid_6_opcs4_1 = merge(codelist_qcovid_6_opcs4, opcs4_3, ['code'], validate='m:1', keep_results=['both', 'left_only'], indicator=1); print()
+
+# check
+tmpt = tab(codelist_qcovid_6_opcs4_1, 'name', '_merge'); print()
+print(codelist_qcovid_6_opcs4_1.where(f.col('_merge') == 'left_only').orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+# assert ... Y902 only
+
+# Notes
+# Within OPCS-4 more specific terms are available within the main chapters therefore the codes below should not be used
+# Y90 Other non-operations
+# Y90.1 Application of transcutaneous electrical nerve stimulator
+# Y90.2 Radiotherapy NEC
+
+# filter
+codelist_qcovid_6_opcs4_2 = (
+  codelist_qcovid_6_opcs4_1
+  .where(f.col('_merge') == 'both')
+  .drop('_merge')
+)
+
+# check
+tmpt = tab(codelist_qcovid_6_opcs4_2, 'name'); print()
+print(codelist_qcovid_6_opcs4_2.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md ## 9.5. Recombine
+
+# COMMAND ----------
+
+codelist_qcovid_7 = (
+  codelist_qcovid_6_snomed_2
+  .unionByName(codelist_qcovid_6_dmd_2)
+  .unionByName(codelist_qcovid_6_icd10_1)
+  .unionByName(codelist_qcovid_6_opcs4_2)
+)
+
+# check
+count_varlist(codelist_qcovid_7, ['name', 'terminology', 'code']); print()
+print(codelist_qcovid_7.orderBy('name', 'terminology', 'code').limit(10).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 9b. Exclude codes 2
+
+# COMMAND ----------
+
+# exclude 
+# Diabetes | 999791000000106 | Haemoglobin A1c level - International Federation of Clinical Chemistry and Laboratory Medicine standardised (observable entity)
+# this code identifies 24m individuals (94m records) - not specific to diabetes...
+
+## PL note: here HbA1c is excluded. No HbA1c measurement?
+
+# check
+count_varlist(codelist_qcovid_7, ['name', 'terminology', 'code']); print()
+print(codelist_qcovid_7.where((f.col('name') == 'Diabetes') & (f.col('code') == '999791000000106')).toPandas().to_string()); print()
+
+# filter
+codelist_qcovid_7b = (
+  codelist_qcovid_7
+  .where(~((f.col('name') == 'Diabetes') & (f.col('code') == '999791000000106')))
+)
+
+# check
+count_varlist(codelist_qcovid_7b, ['name', 'terminology', 'code']); print()
+print(codelist_qcovid_7b.where((f.col('name') == 'Diabetes') & (f.col('code') == '999791000000106')).toPandas().to_string()); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 10. Recode name
+
+# COMMAND ----------
+
+# shorten name for now, removing symbols
+
+# check
+count_var(codelist_qcovid_7b, 'name'); print()
+tmpt = tab(codelist_qcovid_7b, 'name'); print()
+
+codelist_qcovid_8 = (
+  codelist_qcovid_7b
+  .withColumnRenamed('name', 'name_orig')
+  .withColumn('name', f.concat(f.lit('qcovid_'), f.substring(f.regexp_replace(f.col('name_orig'), '/', '_'), 1, 25)))
+)
+
+# check
+count_var(codelist_qcovid_8, 'name'); print()
+tmpt = tab(codelist_qcovid_8, 'name', 'name_orig', var2_wide=0); print()
+
+# COMMAND ----------
+
+# MAGIC %md # 11. Prepare
+
+# COMMAND ----------
+
+codelist_qcovid_9 = (
+  codelist_qcovid_8
+  .select('name', 'terminology', 'code', 'term', 'name_orig')
+)
+
+# COMMAND ----------
+
+# MAGIC %md # 12. Check
+
+# COMMAND ----------
+
+# check 
+tmpt = tab(codelist_qcovid_9, 'name', 'terminology')
+
+# COMMAND ----------
+
+# check
+display(codelist_qcovid_9.orderBy('name', 'terminology', 'code'))
+
+# COMMAND ----------
+
+# check
+display(codelist_qcovid_9.where(f.col('terminology') == 'ICD10').orderBy('name', 'terminology', 'code'))
+
+# COMMAND ----------
+
+# compare
+old = spark.table(f'{dbc}.{proj}_out_codelist_qcovid')
+new = codelist_qcovid_9
+key = ['name', 'terminology', 'code']
+file1, file2, file3, file3_differences = compare_files(old, new, key, warningError=0)
+
+# COMMAND ----------
+
+display(file1)
+
+# COMMAND ----------
+
+display(file2)
+
+# COMMAND ----------
+
+# MAGIC %md # 13. Save
+
+# COMMAND ----------
+
+# save name
+outName = f'{proj}_out_codelist_qcovid'
+
+# save previous version for comparison purposes
+#tmpt = spark.sql(f"""SHOW TABLES FROM {dbc}""")\
+#  .select('tableName')\
+#  .where(f.col('tableName') == outName)\
+#  .collect()
+#if(len(tmpt)>0):
+#  _datetimenow = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+#  outName_pre = f'{outName}_pre{_datetimenow}'.lower()
+#  print(outName_pre)
+#  spark.table(f'{dbc}.{outName}').write.mode('overwrite').saveAsTable(f'{dbc}.{outName_pre}')
+ # spark.sql(f'ALTER TABLE {dbc}.{outName_pre} OWNER TO {dbc}')
+
+# save
+codelist_qcovid_9.write.mode('overwrite').saveAsTable(f'{dbc}.{outName}')
+#spark.sql(f'ALTER TABLE {dbc}.{outName} OWNER TO {dbc}')
+
+# COMMAND ----------
+
+# # archived
+
+# # SNOMED/DMD
+# codelist_qcovid_6_snomed_dmd = (
+#   codelist_qcovid_5
+#   .where(f.col('terminology').isin(['SNOMED', 'DMD']))
+# )
+# tmpt = tab(codelist_qcovid_6_snomed_dmd, 'terminology'); print()
+
+# gp_refset_1 = (
+#   gp_refset
+#   .select(f.col('SNOMED_conceptId').alias('code'), f.col('SNOMED_conceptId_description').alias('term'))
+#   .dropDuplicates(['code'])
+# )
+# snomed_int_1 = (
+#   snomed_int
+#   .select(f.col('CONCEPT_ID').alias('code'), f.col('FULLY_SPECIFIED_NAME').alias('term'))
+#   .dropDuplicates(['code'])
+# )
+# snomed_gb_1 = (
+#   snomed_gb
+#   .select(f.col('CONCEPT_ID').alias('code'), f.col('FULLY_SPECIFIED_NAME').alias('term'))
+#   .dropDuplicates(['code'])
+# )
+# snomed_rf2_1 = (
+#   snomed_rf2
+#   .select(f.col('CONCEPT_ID').alias('code'), f.col('TERM').alias('term'))
+#   .dropDuplicates(['code'])
+# )
+# snomed_rf2_drug_1 = (
+#   snomed_rf2_drug
+#   .select(f.col('CONCEPT_ID').alias('code'), f.col('TERM').alias('term'))
+#   .dropDuplicates(['code'])
+# )
+
+# term = (
+#   gp_refset_1
+#   .unionByName(snomed_int_1)
+#   .unionByName(snomed_gb_1)
+#   .unionByName(snomed_rf2_1)  
+#   .unionByName(snomed_rf2_drug_1)  
+#   .dropDuplicates(['code'])
+# )
+
+# # merge
+# codelist_qcovid_6_snomed_dmd_1 = merge(codelist_qcovid_6_snomed_dmd, term, ['code'], validate='m:1', keep_results=['both', 'left_only'], indicator=1); print()
+
+# # check
+# tmpt = tab(codelist_qcovid_6_snomed_dmd_1, 'name', '_merge'); print()
+
+# COMMAND ----------
+
+# display(codelist_qcovid_6_snomed_dmd_1.where((f.col('name') == 'Asthma') & (f.col('_merge') == 'left_only')))
+
+# COMMAND ----------
+
+# display(codelist_qcovid_6_snomed_dmd_1.where((f.col('name') == 'StrokeOrTia') & (f.col('_merge') == 'left_only')))
+
+# COMMAND ----------
+
+# MAGIC %md # 14. Export codelist
+
+# COMMAND ----------
+
+tmp = spark.table(f'{dbc}.{proj}_out_codelist_qcovid')
+
+# COMMAND ----------
+
+display(tmp)
